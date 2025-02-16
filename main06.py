@@ -61,7 +61,7 @@ class GeneralPricingSystem(ctk.CTk):
             dark_image=logo_image,
             size=(220, 40)
         )
-
+        
         # Add Allianz Partners logo
         self.allianz_logo = ctk.CTkLabel(
             self.header_content,
