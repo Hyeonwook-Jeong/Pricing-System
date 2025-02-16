@@ -9,6 +9,7 @@ import numpy as np
 import seaborn as sns
 import traceback
 from pathlib import Path
+from PIL import Image, ImageTk
 
 class AllInOnePricingSystem(ctk.CTk):
     def __init__(self):
@@ -30,15 +31,44 @@ class AllInOnePricingSystem(ctk.CTk):
         self.main_container = ctk.CTkFrame(self)
         self.main_container.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Header panel (for logo and program name) - 높이를 줄임
-        self.header_panel = ctk.CTkFrame(self.main_container, height=100)  # 높이 지정
-        self.header_panel.pack(fill="x", padx=5, pady=5)
-        self.header_panel.pack_propagate(False)  # 크기 고정
+        # Header panel (for logo and program name)
+        self.header_panel = ctk.CTkFrame(self.main_container, height=60, fg_color="white")  # 높이를 60에서 70으로 증가
+        self.header_panel.pack(fill="x", padx=5, pady=(5, 0))
+        self.header_panel.pack_propagate(False)
 
-        # Placeholder for logo and program name - 높이를 줄임
-        self.logo_frame = ctk.CTkFrame(self.header_panel, height=80)  # 높이 지정
-        self.logo_frame.pack(fill="x", padx=5, pady=5)
-        self.logo_frame.pack_propagate(False)  # 크기 고정
+        # Logo frame with Compass text and Allianz logo
+        self.logo_frame = ctk.CTkFrame(self.header_panel, height=60, fg_color="white")  # 높이를 40에서 50으로 증가
+        self.logo_frame.pack(fill="x", padx=5, pady=2)
+        self.logo_frame.pack_propagate(False)
+
+        # Create a frame for organizing horizontal layout
+        self.header_content = ctk.CTkFrame(self.logo_frame, height=50, fg_color="white")  # 높이를 40에서 50으로 증가
+        self.header_content.pack(fill="x", expand=True)
+
+        # Add Compass text in the center
+        self.compass_label = ctk.CTkLabel(
+            self.header_content,
+            text="Compass",
+            font=("Helvetica", 35, "bold"),
+            text_color="black"
+        )
+        self.compass_label.pack(expand=True, pady=10)  # pady 추가하여 수직 위치 조정
+
+        # Load and resize Allianz Partners logo using CTkImage
+        logo_image = Image.open("allianz_partners_logo.png")
+        ctk_logo = ctk.CTkImage(
+            light_image=logo_image,
+            dark_image=logo_image,
+            size=(220, 40)  # 로고 크기를 더 크게 조정
+        )
+
+        # Add Allianz Partners logo on the right top corner
+        self.allianz_logo = ctk.CTkLabel(
+            self.header_content,
+            image=ctk_logo,
+            text=""
+        )
+        self.allianz_logo.place(relx=1.0, rely=0.5, anchor="e", x=-20, y=0)  # y값 조정
         
         # Status message display
         self.status_label = ctk.CTkLabel(
@@ -57,8 +87,8 @@ class AllInOnePricingSystem(ctk.CTk):
         self.notebook.add(self.data_centre_tab, text="Data Centre")
 
         # Create claim trend tab
-        self.main_tab = ctk.CTkFrame(self.notebook)
-        self.notebook.add(self.main_tab, text="Claim Trend")
+        self.claim_tab = ctk.CTkFrame(self.notebook)
+        self.notebook.add(self.claim_tab, text="Claim")
 
         # Create correlation tab
         self.correlation_tab = ctk.CTkFrame(self.notebook)
@@ -66,8 +96,8 @@ class AllInOnePricingSystem(ctk.CTk):
 
         # Setup all tabs
         self.setup_data_centre_tab()
-        self.setup_main_analysis_tab()
-        self.setup_correlation_analysis_tab()
+        self.setup_claim_tab()
+        self.setup_correlation_tab()
 
     def setup_data_centre_tab(self):
         # File upload frame
@@ -113,9 +143,9 @@ class AllInOnePricingSystem(ctk.CTk):
         )
         self.preview_text.pack(fill="both", expand=True, padx=10, pady=10)
 
-    def setup_main_analysis_tab(self):
+    def setup_claim_tab(self):
         # Scrollable container
-        self.scrollable_frame = ctk.CTkScrollableFrame(self.main_tab)
+        self.scrollable_frame = ctk.CTkScrollableFrame(self.claim_tab)
         self.scrollable_frame.pack(fill="both", expand=True, padx=2, pady=2)
 
         # Graph container
@@ -176,7 +206,7 @@ class AllInOnePricingSystem(ctk.CTk):
             self.graphs_container.grid_columnconfigure(i, weight=1)
             self.graphs_container.grid_rowconfigure(i, weight=1)
 
-    def setup_correlation_analysis_tab(self):
+    def setup_correlation_tab(self):
         # Create scrollable frame
         self.correlation_scroll = ctk.CTkScrollableFrame(self.correlation_tab)
         self.correlation_scroll.pack(fill="both", expand=True, padx=5, pady=5)
@@ -330,7 +360,7 @@ class AllInOnePricingSystem(ctk.CTk):
         
         self.correlation_scatter_frame["canvas"].draw()
 
-    def update_main_visualizations(self):
+    def update_claim_plots(self):
         if self.data is None:
             return
 
@@ -589,7 +619,7 @@ class AllInOnePricingSystem(ctk.CTk):
             self.update_data_preview()
             
             # Update all visualizations
-            self.update_main_visualizations()
+            self.update_claim_plots()
             self.update_correlation_plots()
             
             self.status_label.configure(text=f"Data loaded successfully: {len(self.data)} records")
