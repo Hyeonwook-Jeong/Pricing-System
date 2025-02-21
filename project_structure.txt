@@ -1,0 +1,1253 @@
+# Project Structure
+PRICING_SYSTEM/
+│
+├── main.py                 # Main application entry point
+├── requirements.txt        # Project dependencies
+├── README.md              # Project documentation
+│
+├── gui/                   # GUI related modules
+│   ├── __init__.py
+│   └── tabs/             # Tab implementations
+│       ├── __init__.py
+│       ├── base_tab.py
+│       ├── data_centre_tab.py
+│       ├── performance_tab.py
+│       ├── claim_tab.py
+│       └── correlation_tab.py
+│
+└── utils/                 # Utility modules
+    ├── __init__.py
+    ├── data_processor.py
+    └── plot_utils.py
+
+# requirements.txt
+customtkinter>=5.2.0
+matplotlib>=3.7.1
+numpy>=1.24.3
+pandas>=2.0.2
+Pillow>=9.5.0
+seaborn>=0.12.2
+
+# main.py
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+import customtkinter as ctk
+import pandas as pd
+import traceback
+from pathlib import Path
+from datetime import datetime
+from PIL import Image, ImageTk
+
+from gui.tabs import (
+    DataCentreTab,
+    PerformanceTab,
+    ClaimTab,
+    CorrelationTab
+)
+from utils.data_processor import DataProcessor
+
+class GeneralPricingSystem(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.data_processor = DataProcessor()
+        self.setup_window()
+        self.create_gui()
+
+    def setup_window(self):
+        """Initialize window settings and theme"""
+        self.title("GPS - General Pricing System")
+        self.geometry("1200x800")
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("blue")
+
+    def create_gui(self):
+        """Create the main GUI components"""
+        self.create_main_container()
+        self.create_header()
+        self.create_status_label()
+        self.create_notebook()
+        self.setup_tabs()
+
+    def create_main_container(self):
+        """Create the main container frame"""
+        self.main_container = ctk.CTkFrame(self)
+        self.main_container.pack(fill="both", expand=True, padx=10, pady=10)
+
+    def create_header(self):
+        """Create the header with logo and program name"""
+        # Header panel
+        self.header_panel = ctk.CTkFrame(self.main_container, height=60, fg_color="white")
+        self.header_panel.pack(fill="x", padx=5, pady=(5, 0))
+        self.header_panel.pack_propagate(False)
+
+        # Logo frame
+        self.logo_frame = ctk.CTkFrame(self.header_panel, height=60, fg_color="white")
+        self.logo_frame.pack(fill="x", padx=5, pady=2)
+        self.logo_frame.pack_propagate(False)
+
+        # Header content
+        self.header_content = ctk.CTkFrame(self.logo_frame, height=50, fg_color="white")
+        self.header_content.pack(fill="x", expand=True)
+
+        # Compass label
+        self.compass_label = ctk.CTkLabel(
+            self.header_content,
+            text="Compass",
+            font=("Helvetica", 35, "bold"),
+            text_color="black"
+        )
+        self.compass_label.pack(expand=True, pady=10)
+
+        # Allianz logo
+        self.load_company_logo()
+
+    def load_company_logo(self):
+        """Load and display company logo"""
+        try:
+            logo_image = Image.open("./utils/_logo_.png")
+            ctk_logo = ctk.CTkImage(
+                light_image=logo_image,
+                dark_image=logo_image,
+                size=(220, 40)
+            )
+            
+            self.allianz_logo = ctk.CTkLabel(
+                self.header_content,
+                image=ctk_logo,
+                text=""
+            )
+            self.allianz_logo.place(relx=1.0, rely=0.5, anchor="e", x=-20, y=0)
+        except Exception as e:
+            print(f"Error loading logo: {e}")
+
+    def create_status_label(self):
+        """Create status message display"""
+        self.status_label = ctk.CTkLabel(
+            self.main_container,
+            text="",
+            text_color="yellow"
+        )
+        self.status_label.pack(fill="x", padx=5)
+
+    def create_notebook(self):
+        """Create notebook for tabs"""
+        self.notebook = ttk.Notebook(self.main_container)
+        self.notebook.pack(fill="both", expand=True, padx=5, pady=5)
+        self.notebook.bind('<<NotebookTabChanged>>', self.on_tab_changed)
+
+    def setup_tabs(self):
+        """Setup all tabs"""
+        self.tabs = {
+            'Data Centre': DataCentreTab(self.notebook, self.data_processor),
+            'Performance': PerformanceTab(self.notebook, self.data_processor),
+            'Claim': ClaimTab(self.notebook, self.data_processor),
+            'Correlation': CorrelationTab(self.notebook, self.data_processor)
+        }
+
+        for name, tab in self.tabs.items():
+            self.notebook.add(tab, text=name)
+
+    def on_tab_changed(self, event):
+        """Handle tab change events"""
+        try:
+            current_tab = self.notebook.select()
+            tab_name = self.notebook.tab(current_tab, "text")
+            
+            if self.data_processor.has_data():
+                print(f"Tab changed to: {tab_name}")
+                self.tabs[tab_name].update_view()
+        except Exception as e:
+            self.show_error("Error updating tab visualizations", e)
+
+    def show_error(self, message, error):
+        """Display error message"""
+        error_msg = f"{message}: {str(error)}"
+        self.status_label.configure(text=error_msg)
+        messagebox.showerror("Error", error_msg)
+        print(f"Error: {error_msg}")
+        print(traceback.format_exc())
+
+if __name__ == "__main__":
+    try:
+        app = GeneralPricingSystem()
+        app.mainloop()
+    except Exception as e:
+        print(f"Application error: {str(e)}")
+        print(traceback.format_exc())
+
+# gui/tabs/__init__.py
+from .data_centre_tab import DataCentreTab
+from .performance_tab import PerformanceTab
+from .claim_tab import ClaimTab
+from .correlation_tab import CorrelationTab
+
+__all__ = [
+    'DataCentreTab',
+    'PerformanceTab',
+    'ClaimTab',
+    'CorrelationTab'
+]
+
+# gui/tabs/base_tab.py
+import customtkinter as ctk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+from utils.plot_utils import PlotUtils
+
+class BaseTab(ctk.CTkFrame):
+    def __init__(self, parent, data_processor):
+        super().__init__(parent)
+        self.data_processor = data_processor
+        self.graphs = {}
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Setup UI components - to be implemented by child classes"""
+        raise NotImplementedError
+
+    def create_graph_frame(self, parent, title, row, column, columnspan=1):
+        """Create a frame for matplotlib graph"""
+        frame = ctk.CTkFrame(parent)
+        frame.grid(row=row, column=column, sticky="nsew", padx=5, pady=5, columnspan=columnspan)
+
+        # Title
+        title_label = ctk.CTkLabel(
+            frame,
+            text=title,
+            font=("Helvetica", 16, "bold")
+        )
+        title_label.pack(pady=5)
+
+        # matplotlib graph
+        fig = Figure(figsize=(8, 6), dpi=100)
+        PlotUtils.setup_figure(fig)
+        
+        ax = fig.add_subplot(111)
+        PlotUtils.setup_dark_style(ax)
+            
+        canvas = FigureCanvasTkAgg(fig, master=frame)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=5, pady=5)
+
+        return {"frame": frame, "fig": fig, "ax": ax, "canvas": canvas}
+
+    def update_view(self):
+        """Update all visualizations - to be implemented by child classes"""
+        raise NotImplementedError
+
+# gui/tabs/claim_tab.py
+from .base_tab import BaseTab
+import customtkinter as ctk
+import numpy as np
+from utils.plot_utils import PlotUtils
+import matplotlib.pyplot as plt
+
+class ClaimTab(BaseTab):
+    def setup_ui(self):
+        """Setup Claim tab UI components"""
+        # Scrollable container
+        self.scrollable_frame = ctk.CTkScrollableFrame(self)
+        self.scrollable_frame.pack(fill="both", expand=True, padx=2, pady=2)
+
+        # Graph container
+        self.graphs_container = ctk.CTkFrame(self.scrollable_frame)
+        self.graphs_container.pack(fill="both", expand=True, padx=1, pady=1)
+
+        # Create all graph frames
+        self.create_graph_frames()
+        self.configure_grid()
+
+    def create_graph_frames(self):
+        """Create all graph frames for claim visualization"""
+        self.graphs = {
+            'age': self.create_graph_frame(
+                self.graphs_container,
+                "Claims by Age Group",
+                row=0, column=0
+            ),
+            'amount': self.create_graph_frame(
+                self.graphs_container,
+                "Claim Amount Distribution",
+                row=0, column=1
+            ),
+            'diagnosis': self.create_graph_frame(
+                self.graphs_container,
+                "Claims by Diagnosis",
+                row=1, column=0
+            ),
+            'monthly_trend': self.create_graph_frame(
+                self.graphs_container,
+                "Monthly Claim Trend",
+                row=1, column=1
+            ),
+            'yearly_trend': self.create_graph_frame(
+                self.graphs_container,
+                "Yearly Claim Trend",
+                row=2, column=0
+            ),
+            'avg_amount': self.create_graph_frame(
+                self.graphs_container,
+                "Average Claim by Age",
+                row=2, column=1
+            ),
+            'gender': self.create_graph_frame(
+                self.graphs_container,
+                "Claims by Gender",
+                row=3, column=0
+            ),
+            'seasonal': self.create_graph_frame(
+                self.graphs_container,
+                "Seasonal Pattern",
+                row=3, column=1
+            )
+        }
+
+    def configure_grid(self):
+        """Configure grid layout"""
+        for i in range(4):
+            self.graphs_container.grid_columnconfigure(i, weight=1)
+            self.graphs_container.grid_rowconfigure(i, weight=1)
+
+    def update_view(self):
+        """Update all claim visualizations"""
+        if not self.data_processor.has_data():
+            return
+
+        self.update_age_distribution()
+        self.update_amount_distribution()
+        self.update_diagnosis_distribution()
+        self.update_monthly_trend()
+        self.update_yearly_trend()
+        self.update_average_amount()
+        self.update_gender_distribution()
+        self.update_seasonal_pattern()
+
+    def update_age_distribution(self):
+        """Update age distribution graph"""
+        ax = self.graphs['age']['ax']
+        ax.clear()
+        
+        age_dist = self.data_processor.get_age_distribution()
+        if age_dist is not None:
+            ax.bar(age_dist.index, age_dist.values, color='skyblue')
+            ax.set_xlabel('Age Group')
+            ax.set_ylabel('Number of Claims')
+            plt.setp(ax.get_xticklabels(), rotation=45)
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['age']['canvas'].draw()
+
+    def update_amount_distribution(self):
+        """Update amount distribution graph"""
+        ax = self.graphs['amount']['ax']
+        ax.clear()
+        
+        amount_data = self.data_processor.get_amount_distribution()
+        if amount_data is not None:
+            ax.hist(amount_data, bins=50, color='lightgreen')
+            ax.set_xlabel('Claim Amount')
+            ax.set_ylabel('Frequency')
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['amount']['canvas'].draw()
+
+    def update_diagnosis_distribution(self):
+        """Update diagnosis distribution graph"""
+        ax = self.graphs['diagnosis']['ax']
+        ax.clear()
+        
+        diagnosis_data = self.data_processor.get_diagnosis_distribution()
+        if diagnosis_data is not None:
+            ax.barh(diagnosis_data.index, diagnosis_data.values, color='salmon')
+            ax.set_xlabel('Number of Claims')
+            ax.set_ylabel('Diagnosis')
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['diagnosis']['canvas'].draw()
+
+    def update_monthly_trend(self):
+        """Update monthly trend graph"""
+        ax = self.graphs['monthly_trend']['ax']
+        ax.clear()
+        
+        monthly_data = self.data_processor.get_monthly_trend()
+        if monthly_data is not None:
+            ax.plot(range(len(monthly_data)), monthly_data.values, marker='o')
+            ax.set_xlabel('Month')
+            ax.set_ylabel('Number of Claims')
+            ax.set_xticks(range(len(monthly_data)))
+            ax.set_xticklabels([str(p) for p in monthly_data.index], rotation=45)
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['monthly_trend']['canvas'].draw()
+
+    def update_yearly_trend(self):
+        """Update yearly trend graph"""
+        ax = self.graphs['yearly_trend']['ax']
+        ax.clear()
+        
+        yearly_data = self.data_processor.get_yearly_trend()
+        if yearly_data is not None:
+            ax1 = ax
+            ax2 = ax1.twinx()
+            
+            bars = ax1.bar(yearly_data.index, 
+                         yearly_data[('amount', 'count')],
+                         color='lightblue', alpha=0.7)
+            line = ax2.plot(yearly_data.index, 
+                          yearly_data[('amount', 'mean')],
+                          color='lightgreen', marker='o', linewidth=2)
+            
+            ax1.set_xlabel('Year')
+            ax1.set_ylabel('Number of Claims', color='lightblue')
+            ax2.set_ylabel('Average Claim Amount', color='lightgreen')
+            
+            for bar in bars:
+                height = bar.get_height()
+                ax1.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{int(height):,}',
+                        ha='center', va='bottom', color='white')
+                
+        PlotUtils.setup_dark_style(ax)
+        PlotUtils.setup_dark_style(ax2)
+        self.graphs['yearly_trend']['canvas'].draw()
+
+    def update_average_amount(self):
+        """Update average amount by age graph"""
+        ax = self.graphs['avg_amount']['ax']
+        ax.clear()
+        
+        avg_by_age = self.data_processor.get_average_amount_by_age()
+        if avg_by_age is not None:
+            bars = ax.bar(avg_by_age.index, avg_by_age.values, color='lightblue')
+            
+            for bar in bars:
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., height,
+                       f'${height:,.0f}',
+                       ha='center', va='bottom', color='white')
+                
+            ax.set_xlabel('Age Group')
+            ax.set_ylabel('Average Claim Amount ($)')
+            plt.setp(ax.get_xticklabels(), rotation=45)
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['avg_amount']['canvas'].draw()
+
+    def update_gender_distribution(self):
+        """Update gender distribution graph"""
+        ax = self.graphs['gender']['ax']
+        ax.clear()
+        
+        gender_data = self.data_processor.get_gender_distribution()
+        if gender_data is not None:
+            gender_age_stats = gender_data
+            
+            bar_width = 0.35
+            index = np.arange(len(gender_age_stats['age'].unique()))
+            
+            male_data = gender_age_stats[gender_age_stats['gender'] == 'M']
+            female_data = gender_age_stats[gender_age_stats['gender'] == 'F']
+            
+            ax.bar(index - bar_width/2, male_data['count'], 
+                  bar_width, label='Male', color='lightblue')
+            ax.bar(index + bar_width/2, female_data['count'], 
+                  bar_width, label='Female', color='lightpink')
+            
+            ax.set_xlabel('Age Group')
+            ax.set_ylabel('Number of Claims')
+            ax.set_xticks(index)
+            ax.set_xticklabels(gender_age_stats['age'].unique(), rotation=45)
+            ax.legend()
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['gender']['canvas'].draw()
+
+    def update_seasonal_pattern(self):
+        """Update seasonal pattern graph"""
+        ax = self.graphs['seasonal']['ax']
+        ax.clear()
+        
+        seasonal_data = self.data_processor.get_seasonal_pattern()
+        if seasonal_data is not None:
+            ax1 = ax
+            ax2 = ax1.twinx()
+            
+            bars = ax1.bar(seasonal_data.index, 
+                         seasonal_data[('amount', 'count')],
+                         color='lightblue', alpha=0.7)
+            line = ax2.plot(seasonal_data.index, 
+                          seasonal_data[('amount', 'mean')],
+                          color='lightgreen', marker='o', linewidth=2)
+            
+            ax1.set_xlabel('Season')
+            ax1.set_ylabel('Number of Claims', color='lightblue')
+            ax2.set_ylabel('Average Claim Amount', color='lightgreen')
+            
+            for bar in bars:
+                height = bar.get_height()
+                ax1.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{int(height):,}',
+                        ha='center', va='bottom', color='white')
+                
+        PlotUtils.setup_dark_style(ax)
+        PlotUtils.setup_dark_style(ax2)
+        self.graphs['seasonal']['canvas'].draw()
+
+# gui/tabs/correlation_tab.py
+from .base_tab import BaseTab
+import customtkinter as ctk
+import numpy as np
+import seaborn as sns
+from utils.plot_utils import PlotUtils
+import matplotlib.pyplot as plt
+
+class CorrelationTab(BaseTab):
+    def setup_ui(self):
+        """Setup Correlation tab UI components"""
+        # Create scrollable frame
+        self.scrollable_frame = ctk.CTkScrollableFrame(self)
+        self.scrollable_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Correlation visualization frames
+        self.correlation_frames = ctk.CTkFrame(self.scrollable_frame)
+        self.correlation_frames.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Create graph frames
+        self.create_graph_frames()
+        self.configure_grid()
+
+    def create_graph_frames(self):
+        """Create all graph frames for correlation analysis"""
+        self.graphs = {
+            'heatmap': self.create_graph_frame(
+                self.correlation_frames,
+                "Correlation Heatmap",
+                row=0, column=0, columnspan=2
+            ),
+            'pairs': self.create_graph_frame(
+                self.correlation_frames,
+                "Pairwise Relationships",
+                row=1, column=0, columnspan=2
+            ),
+            'top_correlations': self.create_graph_frame(
+                self.correlation_frames,
+                "Top 10 Correlations",
+                row=2, column=0
+            ),
+            'scatter': self.create_graph_frame(
+                self.correlation_frames,
+                "Key Variables vs Claims",
+                row=2, column=1
+            )
+        }
+
+    def configure_grid(self):
+        """Configure grid layout"""
+        self.correlation_frames.grid_columnconfigure(0, weight=1)
+        self.correlation_frames.grid_columnconfigure(1, weight=1)
+        for i in range(3):
+            self.correlation_frames.grid_rowconfigure(i, weight=1)
+
+    def update_view(self):
+        """Update all correlation visualizations"""
+        if not self.data_processor.has_data():
+            return
+
+        self.update_correlation_heatmap()
+        self.update_pairwise_relationships()
+        self.update_top_correlations()
+        self.update_key_variables_scatter()
+
+    def update_correlation_heatmap(self):
+        """Update correlation heatmap"""
+        ax = self.graphs['heatmap']['ax']
+        ax.clear()
+        fig = self.graphs['heatmap']['fig']
+        
+        corr_matrix = self.data_processor.get_correlation_matrix()
+        if corr_matrix is not None:
+            fig.subplots_adjust(left=0.15, right=0.95, bottom=0.2, top=0.9)
+            
+            sns.heatmap(corr_matrix, 
+                       annot=True, 
+                       cmap='coolwarm', 
+                       ax=ax,
+                       fmt='.2f',
+                       annot_kws={'size': 8},
+                       mask=np.triu(np.ones_like(corr_matrix, dtype=bool)))
+            
+            ax.set_title('Correlation Heatmap', color='white', pad=20)
+            plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+            plt.setp(ax.get_yticklabels(), rotation=0)
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['heatmap']['canvas'].draw()
+
+    def update_pairwise_relationships(self):
+        """Update pairwise relationships visualization"""
+        ax = self.graphs['pairs']['ax']
+        ax.clear()
+        fig = self.graphs['pairs']['fig']
+        
+        if self.data_processor.has_data():
+            fig.subplots_adjust(left=0.1, right=0.95, bottom=0.2, top=0.9)
+            
+            data = self.data_processor.get_data()
+            corr_matrix = self.data_processor.get_correlation_matrix()
+            top_features = abs(corr_matrix['amount']).sort_values(ascending=False)[:4].index
+            
+            n_features = len(top_features)
+            for i in range(n_features):
+                for j in range(n_features):
+                    plt_ax = ax.inset_axes([0.25*i, 0.25*j, 0.23, 0.23])
+                    if i != j:
+                        plt_ax.scatter(data[top_features[i]], 
+                                     data[top_features[j]], 
+                                     alpha=0.5, 
+                                     c='lightblue',
+                                     s=20)
+                    else:
+                        plt_ax.hist(data[top_features[i]], bins=20, color='lightgreen')
+                    if i == 0:
+                        plt_ax.set_ylabel(top_features[j], color='white')
+                    if j == n_features-1:
+                        plt_ax.set_xlabel(top_features[i], color='white')
+                    plt_ax.tick_params(colors='white', labelsize=8)
+            
+            ax.set_title('Pairwise Relationships of Top Features', color='white', pad=20)
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['pairs']['canvas'].draw()
+
+    def update_top_correlations(self):
+        """Update top correlations visualization"""
+        ax = self.graphs['top_correlations']['ax']
+        ax.clear()
+        fig = self.graphs['top_correlations']['fig']
+        
+        if self.data_processor.has_data():
+            fig.subplots_adjust(left=0.3, right=0.95, bottom=0.2, top=0.9)
+            
+            corr_matrix = self.data_processor.get_correlation_matrix()
+            top_corr = corr_matrix['amount'].sort_values(ascending=True)
+            top_corr = top_corr.drop('amount')
+            
+            colors = ['red' if x < 0 else 'green' for x in top_corr]
+            bars = ax.barh(range(len(top_corr)), top_corr, color=colors)
+            ax.set_yticks(range(len(top_corr)))
+            ax.set_yticklabels(top_corr.index, fontsize=8)
+            ax.set_xlabel('Correlation Coefficient')
+            ax.set_title('Correlations with Claim Amount', pad=20)
+            
+            for i, bar in enumerate(bars):
+                width = bar.get_width()
+                ax.text(width, i, f'{width:.2f}', 
+                       color='white', 
+                       va='center',
+                       ha='left' if width >= 0 else 'right')
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['top_correlations']['canvas'].draw()
+
+    def update_key_variables_scatter(self):
+        """Update key variables scatter plots"""
+        ax = self.graphs['scatter']['ax']
+        ax.clear()
+        fig = self.graphs['scatter']['fig']
+        
+        if self.data_processor.has_data():
+            fig.subplots_adjust(left=0.15, right=0.95, bottom=0.2, top=0.9)
+            
+            data = self.data_processor.get_data()
+            corr_matrix = self.data_processor.get_correlation_matrix()
+            top_vars = abs(corr_matrix['amount']).sort_values(ascending=False)[1:4].index
+            
+            colors = plt.cm.tab10(np.linspace(0, 1, len(top_vars)))
+            for var, color in zip(top_vars, colors):
+                ax.scatter(data[var], 
+                          data['amount'], 
+                          alpha=0.5, 
+                          c=[color], 
+                          label=var)
+            
+            ax.set_xlabel('Feature Value')
+            ax.set_ylabel('Claim Amount')
+            ax.legend()
+            ax.set_title('Top Correlating Variables vs Claims', pad=20)
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['scatter']['canvas'].draw()
+
+# gui/tabs/data_centre_tab.py
+from .base_tab import BaseTab
+import customtkinter as ctk
+import tkinter as tk
+from datetime import datetime
+from pathlib import Path
+import shutil
+
+class DataCentreTab(BaseTab):
+    def setup_ui(self):
+        """Setup Data Centre tab UI components"""
+        # Main container frame
+        self.main_container = ctk.CTkFrame(self)
+        self.main_container.pack(fill="both", expand=True, padx=20, pady=(20,5))
+        
+        # Initialize selection tracking variables
+        self.selected_database = None  # 'plsql' or 'local'
+        self.selected_dataset = None
+        
+        # Create UI components
+        self.create_data_selection_frame()
+
+    def create_data_selection_frame(self):
+        """Create data selection section"""
+        # Main Label
+        self.create_section_label(self.main_container, "Data Selection")
+        
+        # Create PLSQL Database Section
+        self.create_plsql_database_section()
+        
+        # Create Local Database Section
+        self.create_local_database_section()
+        
+        # Create Confirm Button
+        self.create_confirm_button()
+
+    def create_section_label(self, parent, text):
+        """Create section label"""
+        label = ctk.CTkLabel(
+            parent,
+            text=text,
+            font=("Helvetica", 16, "bold")
+        )
+        label.pack(anchor="w", padx=10, pady=5)
+
+    def create_plsql_database_section(self):
+        """Create PLSQL database section"""
+        # PLSQL Database Frame
+        self.plsql_frame = ctk.CTkFrame(self.main_container)
+        self.plsql_frame.pack(fill="x", padx=10, pady=5)
+        
+        # Database Label
+        self.create_section_label(self.plsql_frame, "PLSQL Database")
+        
+        # PLSQL Database Listbox
+        self.plsql_listbox_frame = ctk.CTkFrame(self.plsql_frame)
+        self.plsql_listbox_frame.pack(fill="x", padx=10, pady=5)
+        
+        self.plsql_listbox = tk.Listbox(
+            self.plsql_listbox_frame,
+            bg='#2B2B2B',
+            fg='white',
+            selectmode=tk.SINGLE,
+            height=8
+        )
+        self.plsql_listbox.pack(side="left", fill="x", expand=True)
+        self.plsql_listbox.bind('<<ListboxSelect>>', self.on_plsql_select)
+        
+        self.plsql_scrollbar = tk.Scrollbar(self.plsql_listbox_frame, orient="vertical")
+        self.plsql_scrollbar.pack(side="right", fill="y")
+        
+        self.plsql_listbox.config(yscrollcommand=self.plsql_scrollbar.set)
+        self.plsql_scrollbar.config(command=self.plsql_listbox.yview)
+
+        # PLSQL Update Section
+        self.plsql_update_frame = ctk.CTkFrame(self.plsql_frame)
+        self.plsql_update_frame.pack(fill="x", padx=10, pady=5)
+        
+        self.plsql_entry = ctk.CTkEntry(
+            self.plsql_update_frame,
+            placeholder_text="Name of Dataset"
+        )
+        self.plsql_entry.pack(side="left", fill="x", expand=True, padx=(0,10))
+        
+        self.plsql_update_button = ctk.CTkButton(
+            self.plsql_update_frame,
+            text="Update",
+            width=100,
+            command=self.update_plsql_database
+        )
+        self.plsql_update_button.pack(side="right")
+
+    def create_local_database_section(self):
+        """Create local database section"""
+        # Local Database Frame
+        self.local_frame = ctk.CTkFrame(self.main_container)
+        self.local_frame.pack(fill="x", padx=10, pady=5)
+        
+        # Local Database Label
+        self.create_section_label(self.local_frame, "Local Database")
+        
+        # Local Database Listbox
+        self.local_listbox_frame = ctk.CTkFrame(self.local_frame)
+        self.local_listbox_frame.pack(fill="x", padx=10, pady=5)
+        
+        self.local_listbox = tk.Listbox(
+            self.local_listbox_frame,
+            bg='#2B2B2B',
+            fg='white',
+            selectmode=tk.SINGLE,
+            height=8
+        )
+        self.local_listbox.pack(side="left", fill="x", expand=True)
+        self.local_listbox.bind('<<ListboxSelect>>', self.on_local_select)
+        
+        self.local_scrollbar = tk.Scrollbar(self.local_listbox_frame, orient="vertical")
+        self.local_scrollbar.pack(side="right", fill="y")
+        
+        self.local_listbox.config(yscrollcommand=self.local_scrollbar.set)
+        self.local_scrollbar.config(command=self.local_listbox.yview)
+        
+        # File Upload Frame
+        self.upload_frame = ctk.CTkFrame(self.local_frame)
+        self.upload_frame.pack(fill="x", padx=10, pady=5)
+        
+        self.file_label = ctk.CTkLabel(
+            self.upload_frame,
+            text="Please select a file"
+        )
+        self.file_label.pack(side="left", padx=5, fill="x", expand=True)
+        
+        self.file_upload_button = ctk.CTkButton(
+            self.upload_frame,
+            text="Upload Data File",
+            command=self.upload_file,
+            width=150
+        )
+        self.file_upload_button.pack(side="right", padx=5)
+
+    def create_confirm_button(self):
+        """Create confirm button"""
+        self.confirm_frame = ctk.CTkFrame(self.main_container)
+        self.confirm_frame.pack(fill="x", padx=10, pady=10)
+        
+        self.confirm_button = ctk.CTkButton(
+            self.confirm_frame,
+            text="Confirm",
+            width=150,
+            command=self.confirm_selection,
+            state="disabled"  # Initially disabled
+        )
+        self.confirm_button.pack(side="right", padx=5)
+
+        # Status label for showing messages
+        self.status_label = ctk.CTkLabel(
+            self.confirm_frame,
+            text="",
+            text_color="yellow"
+        )
+        self.status_label.pack(side="left", padx=5, fill="x", expand=True)
+
+    def on_plsql_select(self, event):
+        """Handle PLSQL database selection"""
+        selection = self.plsql_listbox.curselection()
+        if selection:
+            self.selected_database = 'plsql'
+            self.selected_dataset = self.plsql_listbox.get(selection[0])
+            self.local_listbox.selection_clear(0, tk.END)
+            self.confirm_button.configure(state="normal")
+
+    def on_local_select(self, event):
+        """Handle local database selection"""
+        selection = self.local_listbox.curselection()
+        if selection:
+            self.selected_database = 'local'
+            self.selected_dataset = self.local_listbox.get(selection[0])
+            self.plsql_listbox.selection_clear(0, tk.END)
+            self.confirm_button.configure(state="normal")
+
+    def update_plsql_database(self):
+        """Handle PLSQL database update"""
+        try:
+            dataset_name = self.plsql_entry.get()
+            if dataset_name:
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+                self.plsql_listbox.insert(tk.END, f"{dataset_name} - Uploaded at {current_time}")
+                self.plsql_entry.delete(0, tk.END)
+                self.show_status(f"PLSQL database updated with dataset: {dataset_name}")
+            else:
+                self.show_status("Please enter a dataset name")
+        except Exception as e:
+            self.show_error("Error updating PLSQL database", e)
+
+    def upload_file(self):
+        """Handle file upload"""
+        try:
+            file_path = tk.filedialog.askopenfilename(
+                title="Select Data File",
+                filetypes=[
+                    ("CSV files", "*.csv"),
+                    ("Excel files", "*.xlsx"),
+                    ("Excel files (old)", "*.xls"),
+                    ("All files", "*.*")
+                ]
+            )
+            
+            if not file_path:
+                return
+
+            file_path = Path(file_path)
+            self.file_label.configure(text=str(file_path))
+            
+            if file_path.suffix.lower() not in ['.csv', '.xlsx', '.xls']:
+                raise ValueError("Unsupported file format")
+
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+            file_name = file_path.name
+            self.local_listbox.insert(tk.END, f"{file_name} - Uploaded at {current_time}")
+            
+            # 파일을 현재 작업 디렉토리에 복사
+            target_path = Path.cwd() / file_name
+            shutil.copy2(file_path, target_path)
+            
+            self.show_status(f"File uploaded: {file_name}")
+            
+        except Exception as e:
+            self.show_error("Error uploading file", e)
+
+    def confirm_selection(self):
+        """Handle confirm button click"""
+        if self.selected_database and self.selected_dataset:
+            try:
+                dataset_name = self.selected_dataset.split(" - ")[0]
+                success, error = self.data_processor.load_file(dataset_name)
+                
+                if success:
+                    self.show_status(f"Successfully loaded dataset: {dataset_name}")
+                else:
+                    raise Exception(error)
+                    
+            except Exception as e:
+                self.show_error("Error loading dataset", e)
+        else:
+            self.show_status("Please select a dataset first")
+
+    def show_error(self, message, error):
+        """Display error message"""
+        error_msg = f"{message}: {str(error)}"
+        self.show_status(error_msg)
+        tk.messagebox.showerror("Error", error_msg)
+
+    def show_status(self, message):
+        """Display status message"""
+        if hasattr(self, 'status_label'):
+            self.status_label.configure(text=message)
+
+    def update_view(self):
+        """Update view (placeholder for base class compatibility)"""
+        pass
+
+# gui/tabs/performance_tab.py
+from .base_tab import BaseTab
+import customtkinter as ctk
+import numpy as np
+from utils.plot_utils import PlotUtils
+import matplotlib.pyplot as plt
+
+class PerformanceTab(BaseTab):
+    def setup_ui(self):
+        """Setup Performance tab UI components"""
+        # Scrollable container
+        self.scrollable_frame = ctk.CTkScrollableFrame(self)
+        self.scrollable_frame.pack(fill="both", expand=True, padx=2, pady=2)
+
+        # Graph container
+        self.graphs_container = ctk.CTkFrame(self.scrollable_frame)
+        self.graphs_container.pack(fill="both", expand=True, padx=1, pady=1)
+
+        # Create all graph frames
+        self.create_graph_frames()
+        self.configure_grid()
+
+    def create_graph_frames(self):
+        """Create all graph frames for performance visualization"""
+        self.graphs = {
+            'age': self.create_graph_frame(
+                self.graphs_container,
+                "Performance by Age Group",
+                row=0, column=0
+            ),
+            'amount': self.create_graph_frame(
+                self.graphs_container,
+                "Performance Amount Distribution",
+                row=0, column=1
+            ),
+            'diagnosis': self.create_graph_frame(
+                self.graphs_container,
+                "Performance by Category",
+                row=1, column=0
+            ),
+            'monthly_trend': self.create_graph_frame(
+                self.graphs_container,
+                "Monthly Performance Trend",
+                row=1, column=1
+            ),
+            'yearly_trend': self.create_graph_frame(
+                self.graphs_container,
+                "Yearly Performance Trend",
+                row=2, column=0
+            ),
+            'avg_amount': self.create_graph_frame(
+                self.graphs_container,
+                "Average Performance by Age",
+                row=2, column=1
+            ),
+            'gender': self.create_graph_frame(
+                self.graphs_container,
+                "Performance by Gender",
+                row=3, column=0
+            ),
+            'seasonal': self.create_graph_frame(
+                self.graphs_container,
+                "Seasonal Performance Pattern",
+                row=3, column=1
+            )
+        }
+
+    def configure_grid(self):
+        """Configure grid layout"""
+        for i in range(4):
+            self.graphs_container.grid_columnconfigure(i, weight=1)
+            self.graphs_container.grid_rowconfigure(i, weight=1)
+
+    def update_view(self):
+        """Update all performance visualizations"""
+        if not self.data_processor.has_data():
+            return
+
+        self.update_age_distribution()
+        self.update_amount_distribution()
+        self.update_diagnosis_distribution()
+        self.update_monthly_trend()
+        self.update_yearly_trend()
+        self.update_average_amount()
+        self.update_gender_distribution()
+        self.update_seasonal_pattern()
+
+    def update_age_distribution(self):
+        """Update age distribution graph"""
+        ax = self.graphs['age']['ax']
+        ax.clear()
+        
+        age_dist = self.data_processor.get_age_distribution()
+        if age_dist is not None:
+            ax.bar(age_dist.index, age_dist.values, color='skyblue')
+            ax.set_xlabel('Age Group')
+            ax.set_ylabel('Performance Count')
+            plt.setp(ax.get_xticklabels(), rotation=45)
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['age']['canvas'].draw()
+
+    def update_amount_distribution(self):
+        """Update amount distribution graph"""
+        ax = self.graphs['amount']['ax']
+        ax.clear()
+        
+        amount_data = self.data_processor.get_amount_distribution()
+        if amount_data is not None:
+            ax.hist(amount_data, bins=50, color='lightgreen')
+            ax.set_xlabel('Performance Amount')
+            ax.set_ylabel('Frequency')
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['amount']['canvas'].draw()
+
+    # Similar update methods for other visualizations...
+    # Each visualization update method follows the same pattern:
+    # 1. Clear the axis
+    # 2. Get data from data_processor
+    # 3. Create the visualization
+    # 4. Setup dark style
+    # 5. Draw the canvas
+
+    def update_seasonal_pattern(self):
+        """Update seasonal pattern graph"""
+        ax = self.graphs['seasonal']['ax']
+        ax.clear()
+        
+        seasonal_data = self.data_processor.get_seasonal_pattern()
+        if seasonal_data is not None:
+            ax1 = ax
+            ax2 = ax1.twinx()
+            
+            bars = ax1.bar(seasonal_data.index, 
+                         seasonal_data[('amount', 'count')],
+                         color='lightblue', alpha=0.7)
+            line = ax2.plot(seasonal_data.index, 
+                          seasonal_data[('amount', 'mean')],
+                          color='lightgreen', marker='o', linewidth=2)
+            
+            ax1.set_xlabel('Season')
+            ax1.set_ylabel('Number of Cases', color='lightblue')
+            ax2.set_ylabel('Average Amount', color='lightgreen')
+            
+            for bar in bars:
+                height = bar.get_height()
+                ax1.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{int(height):,}',
+                        ha='center', va='bottom', color='white')
+                
+        PlotUtils.setup_dark_style(ax)
+        PlotUtils.setup_dark_style(ax2)
+        self.graphs['seasonal']['canvas'].draw()
+
+# utils/data_processor.py
+import pandas as pd
+import numpy as np
+from pathlib import Path
+
+class DataProcessor:
+    def __init__(self):
+        self.data = None
+        self.required_columns = ['age', 'amount', 'diagnosis', 'date']
+
+    def has_data(self):
+        """Check if data is loaded"""
+        return self.data is not None
+
+    def load_file(self, file_path: str):
+      """Load data from file"""
+      try:
+          # 파일 경로를 Path 객체로 변환
+          path = Path(file_path)
+          
+          if path.suffix.lower() == '.csv':
+              self.data = pd.read_csv(file_path)
+          else:
+              self.data = pd.read_excel(file_path)
+
+          self.validate_and_preprocess_data()
+          return True, None
+      except Exception as e:
+          return False, str(e)
+
+    def validate_and_preprocess_data(self):
+        """Validate and preprocess loaded data"""
+        # Check required columns
+        missing_columns = [col for col in self.required_columns if col not in self.data.columns]
+        if missing_columns:
+            raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
+
+        # Convert data types
+        self.data['date'] = pd.to_datetime(self.data['date'])
+        self.data['age'] = pd.to_numeric(self.data['age'], errors='coerce')
+        self.data['amount'] = pd.to_numeric(self.data['amount'], errors='coerce')
+
+        # Add derived columns
+        self.add_derived_columns()
+
+    def add_derived_columns(self):
+        """Add derived columns for analysis"""
+        # Age groups
+        age_bins = [0, 18, 30, 45, 60, 75, 100]
+        age_labels = ['0-18', '19-30', '31-45', '46-60', '61-75', '75+']
+        self.data['age_group'] = pd.cut(self.data['age'], bins=age_bins, labels=age_labels)
+
+        # Seasonal data
+        self.data['month'] = self.data['date'].dt.month
+        self.data['season'] = pd.cut(
+            self.data['date'].dt.month,
+            bins=[0, 3, 6, 9, 12],
+            labels=['Winter', 'Spring', 'Summer', 'Fall']
+        )
+
+    def get_data_summary(self):
+        """Get summary of the data"""
+        if not self.has_data():
+            return "No data loaded"
+
+        summary = []
+        summary.append(f"Total Records: {len(self.data):,}")
+        summary.append(f"Total Columns: {len(self.data.columns)}")
+        summary.append(f"Columns: {', '.join(self.data.columns)}")
+        
+        # Basic statistics
+        numeric_stats = self.data.describe().round(2)
+        summary.append("\nNumeric Statistics:")
+        summary.append(str(numeric_stats))
+        
+        # Sample data
+        summary.append("\nFirst 5 Rows:")
+        summary.append(str(self.data.head()))
+
+        return "\n".join(summary)
+
+    def get_missing_values_summary(self):
+        """Get summary of missing values"""
+        if not self.has_data():
+            return {}
+        return dict(self.data[self.required_columns].isna().sum())
+
+    def get_age_distribution(self):
+        """Get age distribution data"""
+        if not self.has_data():
+            return None
+        return self.data['age_group'].value_counts()
+
+    def get_amount_distribution(self):
+        """Get amount distribution data"""
+        if not self.has_data():
+            return None
+        return self.data['amount']
+
+    def get_diagnosis_distribution(self):
+        """Get diagnosis distribution data"""
+        if not self.has_data():
+            return None
+        return self.data['diagnosis'].value_counts().head(10)
+
+    def get_monthly_trend(self):
+        """Get monthly trend data"""
+        if not self.has_data():
+            return None
+        return self.data.groupby(self.data['date'].dt.to_period('M')).size()
+
+    def get_yearly_trend(self):
+        """Get yearly trend data"""
+        if not self.has_data():
+            return None
+        return self.data.groupby(self.data['date'].dt.year).agg({
+            'amount': ['count', 'mean']
+        })
+
+    def get_seasonal_pattern(self):
+        """Get seasonal pattern data"""
+        if not self.has_data():
+            return None
+        return self.data.groupby('season').agg({
+            'amount': ['count', 'mean']
+        })
+
+    def get_correlation_matrix(self):
+        """Get correlation matrix for numeric columns"""
+        if not self.has_data():
+            return None
+        numeric_cols = self.data.select_dtypes(include=['int64', 'float64']).columns
+        return self.data[numeric_cols].corr()
+
+# utils/plot_utils.py
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+class PlotUtils:
+    @staticmethod
+    def setup_dark_style(ax):
+        """Setup dark style for matplotlib plots"""
+        ax.set_facecolor('#2B2B2B')
+        ax.tick_params(colors='white', labelsize=10)
+        for spine in ax.spines.values():
+            spine.set_color('white')
+        ax.set_xlabel(ax.get_xlabel(), color='white')
+        ax.set_ylabel(ax.get_ylabel(), color='white')
+        if ax.get_title():
+            ax.set_title(ax.get_title(), color='white', pad=20)
+
+    @staticmethod
+    def setup_figure(fig):
+        """Setup figure for dark theme"""
+        fig.patch.set_facecolor('#2B2B2B')
+        fig.subplots_adjust(left=0.15, right=0.95, bottom=0.15, top=0.9)
+
