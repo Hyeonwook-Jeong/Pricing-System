@@ -685,9 +685,10 @@ class CorrelationTab(BaseTab):
         self.graphs['scatter']['canvas'].draw()
 
 # gui/tabs/data_centre_tab.py
-from .base_tab import BaseTab
+from gui.tabs.base_tab import BaseTab
 import customtkinter as ctk
 import tkinter as tk
+from tkinter import filedialog, messagebox
 from datetime import datetime
 from pathlib import Path
 import shutil
@@ -695,9 +696,13 @@ import shutil
 class DataCentreTab(BaseTab):
     def setup_ui(self):
         """Setup Data Centre tab UI components"""
-        # Main container frame
-        self.main_container = ctk.CTkFrame(self)
-        self.main_container.pack(fill="both", expand=True, padx=20, pady=(20,5))
+        # Create main scrollable frame
+        self.main_scrollable = ctk.CTkScrollableFrame(self)
+        self.main_scrollable.pack(fill="both", expand=True)
+        
+        # Main container frame with fixed size for data selection
+        self.main_container = ctk.CTkFrame(self.main_scrollable)
+        self.main_container.pack(fill="x", padx=20, pady=(20,5))
         
         # Initialize selection tracking variables
         self.selected_database = None  # 'plsql' or 'local'
@@ -705,6 +710,16 @@ class DataCentreTab(BaseTab):
         
         # Create UI components
         self.create_data_selection_frame()
+        self.create_data_filtering_frame()
+
+    def create_section_label(self, parent, text):
+        """Create section label"""
+        label = ctk.CTkLabel(
+            parent,
+            text=text,
+            font=("Helvetica", 16, "bold")
+        )
+        label.pack(anchor="w", padx=10, pady=5)
 
     def create_data_selection_frame(self):
         """Create data selection section"""
@@ -719,15 +734,6 @@ class DataCentreTab(BaseTab):
         
         # Create Confirm Button
         self.create_confirm_button()
-
-    def create_section_label(self, parent, text):
-        """Create section label"""
-        label = ctk.CTkLabel(
-            parent,
-            text=text,
-            font=("Helvetica", 16, "bold")
-        )
-        label.pack(anchor="w", padx=10, pady=5)
 
     def create_plsql_database_section(self):
         """Create PLSQL database section"""
@@ -845,6 +851,205 @@ class DataCentreTab(BaseTab):
         )
         self.status_label.pack(side="left", padx=5, fill="x", expand=True)
 
+    def create_data_filtering_frame(self):
+        """Create data filtering section"""
+        # Create filtering frame
+        self.filtering_container = ctk.CTkFrame(self.main_scrollable)
+        self.filtering_container.pack(fill="x", padx=20, pady=5)
+        
+        # Filtering Section Label
+        self.create_section_label(self.filtering_container, "Data Filtering")
+        
+        # Create filter options frame
+        self.filter_options = ctk.CTkFrame(self.filtering_container)
+        self.filter_options.pack(fill="x", padx=10, pady=5)
+        
+        # Configure grid for filter options
+        self.filter_options.grid_columnconfigure(0, weight=1)
+        self.filter_options.grid_columnconfigure(1, weight=1)
+        
+        # Create all filter sections in a 2-column grid
+        filters = [
+            ("Grouping", "Select your grouping", 
+             ["Singapore Individual", "Singapore Corporate", 
+              "Dubai Individual", "Summit", "EHP"]),
+            ("Country", "Select countries",
+             ["United States", "China", "Japan", "Germany", 
+              "India", "United Kingdom", "France", "Italy", 
+              "Canada", "Brazil", "Russia", "South Korea", 
+              "Australia", "Spain", "Mexico", "Indonesia", 
+              "Netherlands", "Saudi Arabia", "Switzerland", "Turkey"]),
+            ("Continent", "Select continents",
+             ["Asia", "Europe", "North America", "South America", 
+              "Africa", "Oceania", "Antarctica"]),
+            ("Rating Year", "Select rating years",
+             [str(year) for year in range(2015, 2025)]),
+            ("Start Year", "Select start years",
+             [str(year) for year in range(2015, 2025)])
+        ]
+        
+        for i, (label, placeholder, options) in enumerate(filters):
+            row = i // 2
+            col = i % 2
+            self.create_dropdown_filter(label, placeholder, options, row, col)
+        
+        # Create filter buttons
+        self.create_filter_buttons()
+
+    def create_dropdown_filter(self, label_text, placeholder_text, options, row, col):
+        """Create a dropdown filter with multi-select capability"""
+        # Create frame for this filter
+        filter_frame = ctk.CTkFrame(self.filter_options)
+        filter_frame.grid(row=row, column=col, padx=5, pady=5, sticky="ew")
+        
+        # Configure columns
+        filter_frame.grid_columnconfigure(1, weight=1)  # Button column
+        
+        # Create label
+        label = ctk.CTkLabel(
+            filter_frame,
+            text=f"{label_text}:",
+            anchor="w"
+        )
+        label.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        
+        # Create dropdown button that will trigger the selection window
+        dropdown_btn = ctk.CTkButton(
+            filter_frame,
+            text=placeholder_text,
+            width=200,
+            command=lambda: self.show_selection_window(label_text, options)
+        )
+        dropdown_btn.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        
+        # Store the button reference
+        setattr(self, f"{label_text.lower().replace(' ', '_')}_btn", dropdown_btn)
+        
+        # Store selected values
+        setattr(self, f"{label_text.lower().replace(' ', '_')}_selected", set())
+
+    def create_filter_buttons(self):
+        """Create filter action buttons"""
+        # Calculate the row for buttons (after all filters)
+        button_row = (len(['Grouping', 'Country', 'Continent', 'Rating Year', 'Start Year']) + 1) // 2
+        
+        # Apply button
+        self.apply_filter_btn = ctk.CTkButton(
+            self.filter_options,
+            text="Apply Filters",
+            command=self.apply_filters,
+            width=200
+        )
+        self.apply_filter_btn.grid(row=button_row, column=0, padx=5, pady=10, sticky="e")
+        
+        # Reset button
+        self.reset_filter_btn = ctk.CTkButton(
+            self.filter_options,
+            text="Reset Filters",
+            command=self.reset_filters,
+            width=200
+        )
+        self.reset_filter_btn.grid(row=button_row, column=1, padx=5, pady=10, sticky="w")
+
+    def show_selection_window(self, title, options):
+        """Show a popup window with checkboxes for multiple selection"""
+        # Create popup window
+        popup = ctk.CTkToplevel(self)
+        popup.title(f"Select {title}")
+        popup.geometry("600x600")
+        
+        # Get current selections
+        current_selections = getattr(self, f"{title.lower().replace(' ', '_')}_selected")
+        
+        # Create scrollable frame for options
+        scroll_frame = ctk.CTkScrollableFrame(popup)
+        scroll_frame.pack(fill="both", expand=True, padx=20, pady=(20, 0))
+        
+        # Dictionary to store checkboxes variables
+        checkbox_vars = {}
+        
+        # Create checkbox for each option
+        for option in options:
+            var = tk.BooleanVar(value=option in current_selections)
+            checkbox_vars[option] = var
+            
+            checkbox = ctk.CTkCheckBox(
+                scroll_frame,
+                text=option,
+                variable=var,
+                width=200
+            )
+            checkbox.pack(anchor="w", padx=10, pady=2)
+        
+        # Create buttons frame
+        button_frame = ctk.CTkFrame(popup, height=60)
+        button_frame.pack(fill="x", padx=20, pady=20, side="bottom")
+        button_frame.pack_propagate(False)
+        
+        # Function to handle selection confirmation
+        def confirm_selection():
+            selected = {opt for opt, var in checkbox_vars.items() if var.get()}
+            attribute_name = f"{title.lower().replace(' ', '_')}_selected"
+            setattr(self, attribute_name, selected)
+            
+            btn = getattr(self, f"{title.lower().replace(' ', '_')}_btn")
+            if selected:
+                text = f"{len(selected)} item{'s' if len(selected) > 1 else ''} selected"
+            else:
+                text = f"Select your {title.lower()}"
+            btn.configure(text=text)
+            
+            popup.destroy()
+        
+        # Function to handle selection cancellation
+        def cancel_selection():
+            popup.destroy()
+        
+        # Function to select all options
+        def select_all():
+            for var in checkbox_vars.values():
+                var.set(True)
+        
+        # Function to clear all selections
+        def clear_all():
+            for var in checkbox_vars.values():
+                var.set(False)
+        
+        # Create control buttons
+        ctk.CTkButton(
+            button_frame,
+            text="Select All",
+            command=select_all,
+            width=120,
+            height=35
+        ).pack(side="left", padx=5, pady=10)
+        
+        ctk.CTkButton(
+            button_frame,
+            text="Clear All",
+            command=clear_all,
+            width=120,
+            height=35
+        ).pack(side="left", padx=5, pady=10)
+        
+        ctk.CTkButton(
+            button_frame,
+            text="Cancel",
+            command=cancel_selection,
+            width=120,
+            height=35
+        ).pack(side="right", padx=5, pady=10)
+        
+        ctk.CTkButton(
+            button_frame,
+            text="Confirm",
+            command=confirm_selection,
+            width=120,
+            height=35,
+            fg_color="#2B6AD0",
+            hover_color="#1E4C9A"
+        ).pack(side="right", padx=5, pady=10)
+
     def on_plsql_select(self, event):
         """Handle PLSQL database selection"""
         selection = self.plsql_listbox.curselection()
@@ -880,7 +1085,7 @@ class DataCentreTab(BaseTab):
     def upload_file(self):
         """Handle file upload"""
         try:
-            file_path = tk.filedialog.askopenfilename(
+            file_path = filedialog.askopenfilename(
                 title="Select Data File",
                 filetypes=[
                     ("CSV files", "*.csv"),
@@ -903,7 +1108,7 @@ class DataCentreTab(BaseTab):
             file_name = file_path.name
             self.local_listbox.insert(tk.END, f"{file_name} - Uploaded at {current_time}")
             
-            # 파일을 현재 작업 디렉토리에 복사
+            # Copy file to current working directory
             target_path = Path.cwd() / file_name
             shutil.copy2(file_path, target_path)
             
@@ -929,11 +1134,63 @@ class DataCentreTab(BaseTab):
         else:
             self.show_status("Please select a dataset first")
 
+    def apply_filters(self):
+        """Apply selected filters to the data"""
+        try:
+            if not self.data_processor.has_data():
+                raise ValueError("No data loaded")
+            
+            # Get selected items from each filter
+            selected_groups = list(self.grouping_selected)
+            selected_countries = list(self.country_selected)
+            selected_continents = list(self.continent_selected)
+            selected_rating_years = list(self.rating_year_selected)
+            selected_start_years = list(self.start_year_selected)
+            
+            # Apply filters
+            success, error = self.data_processor.apply_filters(
+                groups=selected_groups,
+                countries=selected_countries,
+                continents=selected_continents,
+                rating_years=selected_rating_years,
+                start_years=selected_start_years
+            )
+            
+            if success:
+                filter_summary = self.data_processor.get_filter_summary()
+                self.show_status(f"Filters applied successfully\n{filter_summary}")
+            else:
+                raise Exception(error)
+            
+        except Exception as e:
+            self.show_error("Error applying filters", e)
+
+    def reset_filters(self):
+        """Reset all filters to default values"""
+        try:
+            # Clear all selections
+            filter_types = ['grouping', 'country', 'continent', 'rating_year', 'start_year']
+            for filter_type in filter_types:
+                setattr(self, f"{filter_type}_selected", set())
+                btn = getattr(self, f"{filter_type}_btn")
+                btn.configure(text=f"Select your {filter_type}")
+            
+            # Reset data processor filters
+            if self.data_processor.has_data():
+                success, error = self.data_processor.reset_filters()
+                if success:
+                    self.show_status("Filters reset successfully")
+                else:
+                    raise Exception(error)
+                
+        except Exception as e:
+            self.show_error("Error resetting filters", e)
+
     def show_error(self, message, error):
         """Display error message"""
         error_msg = f"{message}: {str(error)}"
         self.show_status(error_msg)
-        tk.messagebox.showerror("Error", error_msg)
+        messagebox.showerror("Error", error_msg)
 
     def show_status(self, message):
         """Display status message"""
@@ -1225,30 +1482,82 @@ class PerformanceTab(BaseTab):
 import pandas as pd
 import numpy as np
 from pathlib import Path
+import logging
+from datetime import datetime
 
 class DataProcessor:
     def __init__(self):
+        # Initialize logging
+        self._setup_logging()
+        
+        # Initialize data storage
         self.data = None
-        self.required_columns = ['age', 'amount', 'diagnosis', 'date', 'gender']
+        self.original_data = None  # Keep original data for reset
+        
+        # Define required columns
+        self.required_columns = ['group', 'country', 'continent', 'rating_year', 'start_year']
+        
+        # Initialize filter tracking
+        self.current_filters = {
+            'groups': [],
+            'countries': [],
+            'continents': [],
+            'rating_years': [],
+            'start_years': []
+        }
+
+    def _setup_logging(self):
+        """Setup logging configuration"""
+        self.logger = logging.getLogger(__name__)
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
 
     def has_data(self):
         """Check if data is loaded"""
-        return self.data is not None
+        return self.data is not None and not self.data.empty
 
     def load_file(self, file_path: str):
-        """Load data from file"""
+        """
+        Load data from file
+        
+        Args:
+            file_path (str): Path to the data file
+            
+        Returns:
+            tuple: (success: bool, error_message: Optional[str])
+        """
         try:
+            self.logger.info(f"Loading file: {file_path}")
             path = Path(file_path)
             
+            if not path.exists():
+                raise FileNotFoundError(f"File not found: {file_path}")
+            
+            # Load data based on file extension
             if path.suffix.lower() == '.csv':
                 self.data = pd.read_csv(file_path)
-            else:
+            elif path.suffix.lower() in ['.xlsx', '.xls']:
                 self.data = pd.read_excel(file_path)
+            else:
+                raise ValueError(f"Unsupported file format: {path.suffix}")
 
+            # Store original data
+            self.original_data = self.data.copy()
+            
+            # Validate and preprocess
             self.validate_and_preprocess_data()
+            
+            self.logger.info("File loaded successfully")
             return True, None
+            
         except Exception as e:
-            return False, str(e)
+            error_msg = f"Error loading file: {str(e)}"
+            self.logger.error(error_msg)
+            return False, error_msg
 
     def validate_and_preprocess_data(self):
         """Validate and preprocess loaded data"""
@@ -1257,151 +1566,251 @@ class DataProcessor:
         if missing_columns:
             raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
 
-        # Convert data types
-        self.data['date'] = pd.to_datetime(self.data['date'])
-        self.data['age'] = pd.to_numeric(self.data['age'], errors='coerce')
-        self.data['amount'] = pd.to_numeric(self.data['amount'], errors='coerce')
+        try:
+            # Convert data types
+            self.data['rating_year'] = pd.to_numeric(self.data['rating_year'], errors='coerce')
+            self.data['start_year'] = pd.to_numeric(self.data['start_year'], errors='coerce')
+            
+            # Ensure string columns are strings and standardize case
+            string_columns = ['group', 'country', 'continent']
+            for col in string_columns:
+                self.data[col] = self.data[col].astype(str).str.strip()
+                
+            # Remove any rows with NaN values in critical columns
+            self.data = self.data.dropna(subset=self.required_columns)
+            
+            # Store the cleaned data as original
+            self.original_data = self.data.copy()
+            
+            self.logger.info("Data validation and preprocessing completed")
+            
+        except Exception as e:
+            self.logger.error(f"Error in data preprocessing: {str(e)}")
+            raise
+
+    def apply_filters(self, groups=None, countries=None, continents=None, 
+                     rating_years=None, start_years=None):
+        """
+        Apply filters to the data
         
-        # Ensure gender is uppercase
-        self.data['gender'] = self.data['gender'].str.upper()
+        Args:
+            groups (list): List of selected groups
+            countries (list): List of selected countries
+            continents (list): List of selected continents
+            rating_years (list): List of selected rating years
+            start_years (list): List of selected start years
+            
+        Returns:
+            tuple: (success: bool, error_message: Optional[str])
+        """
+        try:
+            if not self.has_data():
+                raise ValueError("No data loaded")
 
-        # Remove any rows with NaN values in critical columns
-        self.data = self.data.dropna(subset=['age', 'amount', 'date', 'gender'])
+            self.logger.info("Applying filters...")
+                
+            # Store current filters
+            self.current_filters = {
+                'groups': groups or [],
+                'countries': countries or [],
+                'continents': continents or [],
+                'rating_years': [int(year) for year in (rating_years or [])],
+                'start_years': [int(year) for year in (start_years or [])]
+            }
 
-        # Add derived columns
-        self.add_derived_columns()
+            # Start with original data
+            filtered_data = self.original_data.copy()
 
-    def add_derived_columns(self):
-        """Add derived columns for analysis"""
-        # Age groups
-        age_bins = [0, 18, 30, 45, 60, 75, 100]
-        age_labels = ['0-18', '19-30', '31-45', '46-60', '61-75', '75+']
-        self.data['age_group'] = pd.cut(self.data['age'], 
-                                      bins=age_bins, 
-                                      labels=age_labels,
-                                      ordered=True)
+            # Apply each filter if selections were made
+            if groups:
+                filtered_data = filtered_data[filtered_data['group'].isin(groups)]
+                self.logger.info(f"Filtered by groups: {len(filtered_data)} rows remaining")
+            
+            if countries:
+                filtered_data = filtered_data[filtered_data['country'].isin(countries)]
+                self.logger.info(f"Filtered by countries: {len(filtered_data)} rows remaining")
+            
+            if continents:
+                filtered_data = filtered_data[filtered_data['continent'].isin(continents)]
+                self.logger.info(f"Filtered by continents: {len(filtered_data)} rows remaining")
+            
+            if rating_years:
+                filtered_data = filtered_data[filtered_data['rating_year'].isin(rating_years)]
+                self.logger.info(f"Filtered by rating years: {len(filtered_data)} rows remaining")
+            
+            if start_years:
+                filtered_data = filtered_data[filtered_data['start_year'].isin(start_years)]
+                self.logger.info(f"Filtered by start years: {len(filtered_data)} rows remaining")
 
-        # Seasonal data
-        self.data['month'] = self.data['date'].dt.month
-        self.data['season'] = pd.cut(
-            self.data['date'].dt.month,
-            bins=[0, 3, 6, 9, 12],
-            labels=['Winter', 'Spring', 'Summer', 'Fall'],
-            ordered=True
-        )
+            # Update current data
+            self.data = filtered_data
+            
+            self.logger.info("Filters applied successfully")
+            return True, None
+            
+        except Exception as e:
+            error_msg = f"Error applying filters: {str(e)}"
+            self.logger.error(error_msg)
+            return False, error_msg
 
-    def get_data(self):
-        """Get the processed data"""
-        return self.data if self.has_data() else None
+    def reset_filters(self):
+        """
+        Reset all filters and restore original data
+        
+        Returns:
+            tuple: (success: bool, error_message: Optional[str])
+        """
+        try:
+            self.logger.info("Resetting filters...")
+            
+            # Restore original data
+            self.data = self.original_data.copy()
+            
+            # Reset filter tracking
+            self.current_filters = {
+                'groups': [],
+                'countries': [],
+                'continents': [],
+                'rating_years': [],
+                'start_years': []
+            }
+            
+            self.logger.info("Filters reset successfully")
+            return True, None
+            
+        except Exception as e:
+            error_msg = f"Error resetting filters: {str(e)}"
+            self.logger.error(error_msg)
+            return False, error_msg
 
-    def get_data_summary(self):
-        """Get summary of the data"""
+    def get_filter_summary(self):
+        """
+        Get summary of currently applied filters
+        
+        Returns:
+            str: Summary of applied filters
+        """
+        summary = []
+        
+        for filter_name, values in self.current_filters.items():
+            if values:
+                summary.append(f"{filter_name.capitalize()}: {', '.join(map(str, values))}")
+        
+        if not summary:
+            return "No filters applied"
+        
+        return "\n".join(summary)
+
+    def get_unique_values(self, column):
+        """
+        Get unique values for a given column
+        
+        Args:
+            column (str): Column name
+            
+        Returns:
+            list: Sorted list of unique values
+        """
+        if self.has_data() and column in self.data.columns:
+            return sorted(self.data[column].unique())
+        return []
+
+    def get_filtered_data_summary(self):
+        """
+        Get summary statistics of filtered data
+        
+        Returns:
+            str: Summary statistics text
+        """
         if not self.has_data():
-            return "No data loaded"
+            return "No data available"
 
         summary = []
         summary.append(f"Total Records: {len(self.data):,}")
-        summary.append(f"Total Columns: {len(self.data.columns)}")
-        summary.append(f"Columns: {', '.join(self.data.columns)}")
         
-        # Basic statistics
-        numeric_stats = self.data.describe().round(2)
-        summary.append("\nNumeric Statistics:")
-        summary.append(str(numeric_stats))
+        # Group counts
+        if 'group' in self.data.columns:
+            group_counts = self.data['group'].value_counts()
+            summary.append("\nGroup Distribution:")
+            for group, count in group_counts.items():
+                summary.append(f"{group}: {count:,}")
         
-        # Sample data
-        summary.append("\nFirst 5 Rows:")
-        summary.append(str(self.data.head()))
+        # Country counts
+        if 'country' in self.data.columns:
+            country_counts = self.data['country'].value_counts().head(10)
+            summary.append("\nTop 10 Countries:")
+            for country, count in country_counts.items():
+                summary.append(f"{country}: {count:,}")
+        
+        # Year distribution
+        if 'rating_year' in self.data.columns:
+            year_counts = self.data['rating_year'].value_counts().sort_index()
+            summary.append("\nRating Year Distribution:")
+            for year, count in year_counts.items():
+                summary.append(f"{year}: {count:,}")
 
         return "\n".join(summary)
 
-    def get_missing_values_summary(self):
-        """Get summary of missing values"""
-        if not self.has_data():
-            return {}
-        return dict(self.data[self.required_columns].isna().sum())
-
-    def get_age_distribution(self):
-        """Get age distribution data"""
-        if not self.has_data():
-            return None
-        return self.data['age_group'].value_counts(sort=False)
-
-    def get_amount_distribution(self):
-        """Get amount distribution data"""
-        if not self.has_data():
-            return None
-        return self.data['amount'].dropna()
-
-    def get_diagnosis_distribution(self):
-        """Get diagnosis distribution data"""
-        if not self.has_data():
-            return None
-        return self.data['diagnosis'].value_counts().head(10)
-
-    def get_monthly_trend(self):
-        """Get monthly trend data"""
-        if not self.has_data():
-            return None
-        monthly_data = self.data.groupby(self.data['date'].dt.to_period('M')).size()
-        return monthly_data.sort_index()
-
-    def get_yearly_trend(self):
-        """Get yearly trend data"""
-        if not self.has_data():
-            return None
-        yearly_data = self.data.groupby(self.data['date'].dt.year).agg({
-            'amount': ['count', 'mean']
-        })
-        return yearly_data.sort_index()
-
-    def get_seasonal_pattern(self):
-        """Get seasonal pattern data"""
-        if not self.has_data():
-            return None
-        return self.data.groupby('season', observed=True).agg({
-            'amount': ['count', 'mean']
-        })
-
-    def get_correlation_matrix(self):
-        """Get correlation matrix for numeric columns"""
-        if not self.has_data():
-            return None
-        numeric_cols = self.data.select_dtypes(include=['int64', 'float64']).columns
-        return self.data[numeric_cols].corr()
-
-    def get_average_amount_by_age(self):
-        """Get average amount by age group"""
-        if not self.has_data():
-            return None
-        return self.data.groupby('age_group', observed=True)['amount'].mean().sort_index()
-
-    def get_gender_distribution(self):
-        """Get gender distribution data by age group"""
-        if not self.has_data():
-            return None
+    def export_filtered_data(self, file_path):
+        """
+        Export filtered data to file
         
-        # Calculate counts by age_group and gender
-        gender_dist = self.data.groupby(['age_group', 'gender'], observed=True).size().unstack(fill_value=0)
-        
-        # Reset index to make age_group a column
-        gender_dist = gender_dist.reset_index()
-        
-        # Ensure M and F columns exist
-        if 'M' not in gender_dist.columns:
-            gender_dist['M'] = 0
-        if 'F' not in gender_dist.columns:
-            gender_dist['F'] = 0
+        Args:
+            file_path (str): Path where to save the file
             
-        # Melt the DataFrame to get it in the right format
-        gender_dist = gender_dist.melt(
-            id_vars=['age_group'],
-            value_vars=['M', 'F'],
-            var_name='gender',
-            value_name='count'
-        )
+        Returns:
+            tuple: (success: bool, error_message: Optional[str])
+        """
+        try:
+            if not self.has_data():
+                raise ValueError("No data available to export")
+
+            self.logger.info(f"Exporting data to: {file_path}")
+            
+            path = Path(file_path)
+            if path.suffix.lower() == '.csv':
+                self.data.to_csv(file_path, index=False)
+            elif path.suffix.lower() in ['.xlsx', '.xls']:
+                self.data.to_excel(file_path, index=False)
+            else:
+                raise ValueError(f"Unsupported export format: {path.suffix}")
+            
+            self.logger.info("Data exported successfully")
+            return True, None
+            
+        except Exception as e:
+            error_msg = f"Error exporting data: {str(e)}"
+            self.logger.error(error_msg)
+            return False, error_msg
+
+    def get_data_statistics(self):
+        """
+        Get comprehensive statistics about the data
         
-        return gender_dist
+        Returns:
+            dict: Dictionary containing various statistics
+        """
+        if not self.has_data():
+            return {"error": "No data available"}
+
+        try:
+            stats = {
+                "total_records": len(self.data),
+                "total_records_original": len(self.original_data),
+                "filtered_percentage": (len(self.data) / len(self.original_data) * 100) if self.original_data is not None else 100,
+                "groups": self.data['group'].value_counts().to_dict(),
+                "countries": self.data['country'].value_counts().to_dict(),
+                "continents": self.data['continent'].value_counts().to_dict(),
+                "rating_years": self.data['rating_year'].value_counts().sort_index().to_dict(),
+                "start_years": self.data['start_year'].value_counts().sort_index().to_dict(),
+                "current_filters": self.current_filters
+            }
+            
+            return stats
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating statistics: {str(e)}")
+            return {"error": str(e)}
 
 # utils/plot_utils.py
 import matplotlib.pyplot as plt
