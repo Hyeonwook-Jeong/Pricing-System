@@ -5,6 +5,7 @@ import numpy as np
 import seaborn as sns
 from utils.plot_utils import PlotUtils
 import matplotlib.pyplot as plt
+import pandas as pd  # 이 줄을 추가하세요
 
 class CorrelationTab(BaseTab):
     def setup_ui(self):
@@ -97,29 +98,39 @@ class CorrelationTab(BaseTab):
         if self.data_processor.has_data():
             fig.subplots_adjust(left=0.1, right=0.95, bottom=0.2, top=0.9)
             
-            data = self.data_processor.get_data()
+            # Use correlation matrix to get top categorical features
             corr_matrix = self.data_processor.get_correlation_matrix()
-            top_features = abs(corr_matrix['amount']).sort_values(ascending=False)[:4].index
             
+            # Get top features based on their correlation to each other
+            correlation_values = corr_matrix.abs().sum()
+            top_features = correlation_values.sort_values(ascending=False)[:4].index
+            
+            data = self.data_processor.get_data()
             n_features = len(top_features)
+            
             for i in range(n_features):
                 for j in range(n_features):
                     plt_ax = ax.inset_axes([0.25*i, 0.25*j, 0.23, 0.23])
+                    
+                    # If not on diagonal, create scatter/bar plot
                     if i != j:
-                        plt_ax.scatter(data[top_features[i]], 
-                                     data[top_features[j]], 
-                                     alpha=0.5, 
-                                     c='lightblue',
-                                     s=20)
+                        # For categorical variables, create stacked bar plot
+                        crosstab = pd.crosstab(data[top_features[i]], data[top_features[j]])
+                        crosstab.plot(kind='bar', stacked=True, ax=plt_ax, legend=False)
+                        plt_ax.set_xlabel('')
+                        plt_ax.set_ylabel('')
                     else:
-                        plt_ax.hist(data[top_features[i]], bins=20, color='lightgreen')
+                        # On diagonal, show distribution
+                        data[top_features[i]].value_counts().plot(kind='bar', ax=plt_ax)
+                        plt_ax.set_title('')
+
                     if i == 0:
                         plt_ax.set_ylabel(top_features[j], color='white')
                     if j == n_features-1:
                         plt_ax.set_xlabel(top_features[i], color='white')
-                    plt_ax.tick_params(colors='white', labelsize=8)
+                    plt_ax.tick_params(colors='white', labelsize=8, rotation=45)
             
-            ax.set_title('Pairwise Relationships of Top Features', color='white', pad=20)
+            ax.set_title('Pairwise Relationships of Top Categorical Features', color='white', pad=20)
             
         PlotUtils.setup_dark_style(ax)
         self.graphs['pairs']['canvas'].draw()
@@ -134,22 +145,25 @@ class CorrelationTab(BaseTab):
             fig.subplots_adjust(left=0.3, right=0.95, bottom=0.2, top=0.9)
             
             corr_matrix = self.data_processor.get_correlation_matrix()
-            top_corr = corr_matrix['amount'].sort_values(ascending=True)
-            top_corr = top_corr.drop('amount')
+            
+            # Calculate overall correlation and sort
+            correlation_values = corr_matrix.abs().sum()
+            top_corr = correlation_values.sort_values(ascending=True)
+            top_corr = top_corr.drop(top_corr.index[top_corr.index == top_corr.index[0]])
             
             colors = ['red' if x < 0 else 'green' for x in top_corr]
             bars = ax.barh(range(len(top_corr)), top_corr, color=colors)
             ax.set_yticks(range(len(top_corr)))
             ax.set_yticklabels(top_corr.index, fontsize=8)
             ax.set_xlabel('Correlation Coefficient')
-            ax.set_title('Correlations with Claim Amount', pad=20)
+            ax.set_title('Correlations between Categorical Variables', pad=20)
             
             for i, bar in enumerate(bars):
                 width = bar.get_width()
                 ax.text(width, i, f'{width:.2f}', 
-                       color='white', 
-                       va='center',
-                       ha='left' if width >= 0 else 'right')
+                    color='white', 
+                    va='center',
+                    ha='left' if width >= 0 else 'right')
             
         PlotUtils.setup_dark_style(ax)
         self.graphs['top_correlations']['canvas'].draw()
@@ -163,22 +177,25 @@ class CorrelationTab(BaseTab):
         if self.data_processor.has_data():
             fig.subplots_adjust(left=0.15, right=0.95, bottom=0.2, top=0.9)
             
-            data = self.data_processor.get_data()
             corr_matrix = self.data_processor.get_correlation_matrix()
-            top_vars = abs(corr_matrix['amount']).sort_values(ascending=False)[1:4].index
+            
+            # Get top features based on overall correlation
+            correlation_values = corr_matrix.abs().sum()
+            top_vars = correlation_values.sort_values(ascending=False)[1:4].index
+            
+            # For categorical variables, use stacked bar plot
+            data = self.data_processor.get_data()
             
             colors = plt.cm.tab10(np.linspace(0, 1, len(top_vars)))
             for var, color in zip(top_vars, colors):
-                ax.scatter(data[var], 
-                          data['amount'], 
-                          alpha=0.5, 
-                          c=[color], 
-                          label=var)
+                # Create a cross-tabulation for the variables
+                crosstab = pd.crosstab(data[var], columns='count', normalize='index')
+                crosstab.plot(kind='bar', color=color, ax=ax, label=var)
             
-            ax.set_xlabel('Feature Value')
-            ax.set_ylabel('Claim Amount')
+            ax.set_xlabel('Categories')
+            ax.set_ylabel('Proportion')
             ax.legend()
-            ax.set_title('Top Correlating Variables vs Claims', pad=20)
+            ax.set_title('Distribution of Top Categorical Variables', pad=20)
             
         PlotUtils.setup_dark_style(ax)
         self.graphs['scatter']['canvas'].draw()
