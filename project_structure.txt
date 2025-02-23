@@ -175,19 +175,6 @@ if __name__ == "__main__":
         print(f"Application error: {str(e)}")
         print(traceback.format_exc())
 
-# gui/tabs/__init__.py
-from .data_centre_tab import DataCentreTab
-from .performance_tab import PerformanceTab
-from .claim_tab import ClaimTab
-from .correlation_tab import CorrelationTab
-
-__all__ = [
-    'DataCentreTab',
-    'PerformanceTab',
-    'ClaimTab',
-    'CorrelationTab'
-]
-
 # gui/tabs/base_tab.py
 import customtkinter as ctk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -313,14 +300,18 @@ class ClaimTab(BaseTab):
         if not self.data_processor.has_data():
             return
 
-        self.update_age_distribution()
-        self.update_amount_distribution()
-        self.update_diagnosis_distribution()
-        self.update_monthly_trend()
-        self.update_yearly_trend()
-        self.update_average_amount()
-        self.update_gender_distribution()
-        self.update_seasonal_pattern()
+        try:
+            self.update_age_distribution()
+            self.update_amount_distribution()
+            self.update_diagnosis_distribution()
+            self.update_monthly_trend()
+            self.update_yearly_trend()
+            self.update_average_amount()
+            self.update_gender_distribution()
+            self.update_seasonal_pattern()
+        except Exception as e:
+            print(f"Error updating visualizations: {str(e)}")
+            raise e
 
     def update_age_distribution(self):
         """Update age distribution graph"""
@@ -329,10 +320,11 @@ class ClaimTab(BaseTab):
         
         age_dist = self.data_processor.get_age_distribution()
         if age_dist is not None:
-            ax.bar(age_dist.index, age_dist.values, color='skyblue')
+            ax.bar(range(len(age_dist)), age_dist.values, color='skyblue')
             ax.set_xlabel('Age Group')
             ax.set_ylabel('Number of Claims')
-            plt.setp(ax.get_xticklabels(), rotation=45)
+            ax.set_xticks(range(len(age_dist)))
+            ax.set_xticklabels(age_dist.index, rotation=45)
             
         PlotUtils.setup_dark_style(ax)
         self.graphs['age']['canvas'].draw()
@@ -358,9 +350,11 @@ class ClaimTab(BaseTab):
         
         diagnosis_data = self.data_processor.get_diagnosis_distribution()
         if diagnosis_data is not None:
-            ax.barh(diagnosis_data.index, diagnosis_data.values, color='salmon')
+            ax.barh(range(len(diagnosis_data)), diagnosis_data.values, color='salmon')
             ax.set_xlabel('Number of Claims')
             ax.set_ylabel('Diagnosis')
+            ax.set_yticks(range(len(diagnosis_data)))
+            ax.set_yticklabels(diagnosis_data.index)
             
         PlotUtils.setup_dark_style(ax)
         self.graphs['diagnosis']['canvas'].draw()
@@ -391,16 +385,18 @@ class ClaimTab(BaseTab):
             ax1 = ax
             ax2 = ax1.twinx()
             
-            bars = ax1.bar(yearly_data.index, 
-                         yearly_data[('amount', 'count')],
+            x = range(len(yearly_data.index))
+            bars = ax1.bar(x, yearly_data[('amount', 'count')],
                          color='lightblue', alpha=0.7)
-            line = ax2.plot(yearly_data.index, 
-                          yearly_data[('amount', 'mean')],
+            line = ax2.plot(x, yearly_data[('amount', 'mean')],
                           color='lightgreen', marker='o', linewidth=2)
             
             ax1.set_xlabel('Year')
             ax1.set_ylabel('Number of Claims', color='lightblue')
             ax2.set_ylabel('Average Claim Amount', color='lightgreen')
+            
+            ax1.set_xticks(x)
+            ax1.set_xticklabels(yearly_data.index, rotation=45)
             
             for bar in bars:
                 height = bar.get_height()
@@ -419,7 +415,11 @@ class ClaimTab(BaseTab):
         
         avg_by_age = self.data_processor.get_average_amount_by_age()
         if avg_by_age is not None:
-            bars = ax.bar(avg_by_age.index, avg_by_age.values, color='lightblue')
+            x = range(len(avg_by_age))
+            bars = ax.bar(x, avg_by_age.values, color='lightblue')
+            
+            ax.set_xticks(x)
+            ax.set_xticklabels(avg_by_age.index, rotation=45)
             
             for bar in bars:
                 height = bar.get_height()
@@ -429,7 +429,6 @@ class ClaimTab(BaseTab):
                 
             ax.set_xlabel('Age Group')
             ax.set_ylabel('Average Claim Amount ($)')
-            plt.setp(ax.get_xticklabels(), rotation=45)
             
         PlotUtils.setup_dark_style(ax)
         self.graphs['avg_amount']['canvas'].draw()
@@ -441,23 +440,27 @@ class ClaimTab(BaseTab):
         
         gender_data = self.data_processor.get_gender_distribution()
         if gender_data is not None:
-            gender_age_stats = gender_data
+            # Group data by age_group
+            age_groups = gender_data['age_group'].unique()
+            n_groups = len(age_groups)
             
             bar_width = 0.35
-            index = np.arange(len(gender_age_stats['age'].unique()))
+            index = np.arange(n_groups)
             
-            male_data = gender_age_stats[gender_age_stats['gender'] == 'M']
-            female_data = gender_age_stats[gender_age_stats['gender'] == 'F']
+            # Get data for males and females
+            male_data = gender_data[gender_data['gender'] == 'M']['count'].values
+            female_data = gender_data[gender_data['gender'] == 'F']['count'].values
             
-            ax.bar(index - bar_width/2, male_data['count'], 
-                  bar_width, label='Male', color='lightblue')
-            ax.bar(index + bar_width/2, female_data['count'], 
-                  bar_width, label='Female', color='lightpink')
+            # Create bars
+            ax.bar(index - bar_width/2, male_data, bar_width, 
+                  label='Male', color='lightblue')
+            ax.bar(index + bar_width/2, female_data, bar_width,
+                  label='Female', color='lightpink')
             
             ax.set_xlabel('Age Group')
             ax.set_ylabel('Number of Claims')
             ax.set_xticks(index)
-            ax.set_xticklabels(gender_age_stats['age'].unique(), rotation=45)
+            ax.set_xticklabels(age_groups, rotation=45)
             ax.legend()
             
         PlotUtils.setup_dark_style(ax)
@@ -473,16 +476,18 @@ class ClaimTab(BaseTab):
             ax1 = ax
             ax2 = ax1.twinx()
             
-            bars = ax1.bar(seasonal_data.index, 
-                         seasonal_data[('amount', 'count')],
+            x = range(len(seasonal_data.index))
+            bars = ax1.bar(x, seasonal_data[('amount', 'count')],
                          color='lightblue', alpha=0.7)
-            line = ax2.plot(seasonal_data.index, 
-                          seasonal_data[('amount', 'mean')],
+            line = ax2.plot(x, seasonal_data[('amount', 'mean')],
                           color='lightgreen', marker='o', linewidth=2)
             
             ax1.set_xlabel('Season')
             ax1.set_ylabel('Number of Claims', color='lightblue')
             ax2.set_ylabel('Average Claim Amount', color='lightgreen')
+            
+            ax1.set_xticks(x)
+            ax1.set_xticklabels(seasonal_data.index, rotation=45)
             
             for bar in bars:
                 height = bar.get_height()
@@ -1017,14 +1022,18 @@ class PerformanceTab(BaseTab):
         if not self.data_processor.has_data():
             return
 
-        self.update_age_distribution()
-        self.update_amount_distribution()
-        self.update_diagnosis_distribution()
-        self.update_monthly_trend()
-        self.update_yearly_trend()
-        self.update_average_amount()
-        self.update_gender_distribution()
-        self.update_seasonal_pattern()
+        try:
+            self.update_age_distribution()
+            self.update_amount_distribution()
+            self.update_diagnosis_distribution()
+            self.update_monthly_trend()
+            self.update_yearly_trend()
+            self.update_average_amount()
+            self.update_gender_distribution()
+            self.update_seasonal_pattern()
+        except Exception as e:
+            print(f"Error updating visualizations: {str(e)}")
+            raise e
 
     def update_age_distribution(self):
         """Update age distribution graph"""
@@ -1033,10 +1042,11 @@ class PerformanceTab(BaseTab):
         
         age_dist = self.data_processor.get_age_distribution()
         if age_dist is not None:
-            ax.bar(age_dist.index, age_dist.values, color='skyblue')
+            ax.bar(range(len(age_dist)), age_dist.values, color='skyblue')
             ax.set_xlabel('Age Group')
             ax.set_ylabel('Performance Count')
-            plt.setp(ax.get_xticklabels(), rotation=45)
+            ax.set_xticks(range(len(age_dist)))
+            ax.set_xticklabels(age_dist.index, rotation=45)
             
         PlotUtils.setup_dark_style(ax)
         self.graphs['age']['canvas'].draw()
@@ -1055,13 +1065,128 @@ class PerformanceTab(BaseTab):
         PlotUtils.setup_dark_style(ax)
         self.graphs['amount']['canvas'].draw()
 
-    # Similar update methods for other visualizations...
-    # Each visualization update method follows the same pattern:
-    # 1. Clear the axis
-    # 2. Get data from data_processor
-    # 3. Create the visualization
-    # 4. Setup dark style
-    # 5. Draw the canvas
+    def update_diagnosis_distribution(self):
+        """Update diagnosis distribution graph"""
+        ax = self.graphs['diagnosis']['ax']
+        ax.clear()
+        
+        diagnosis_data = self.data_processor.get_diagnosis_distribution()
+        if diagnosis_data is not None:
+            ax.barh(range(len(diagnosis_data)), diagnosis_data.values, color='salmon')
+            ax.set_xlabel('Performance Count')
+            ax.set_ylabel('Category')
+            ax.set_yticks(range(len(diagnosis_data)))
+            ax.set_yticklabels(diagnosis_data.index)
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['diagnosis']['canvas'].draw()
+
+    def update_monthly_trend(self):
+        """Update monthly trend graph"""
+        ax = self.graphs['monthly_trend']['ax']
+        ax.clear()
+        
+        monthly_data = self.data_processor.get_monthly_trend()
+        if monthly_data is not None:
+            ax.plot(range(len(monthly_data)), monthly_data.values, marker='o')
+            ax.set_xlabel('Month')
+            ax.set_ylabel('Performance Count')
+            ax.set_xticks(range(len(monthly_data)))
+            ax.set_xticklabels([str(p) for p in monthly_data.index], rotation=45)
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['monthly_trend']['canvas'].draw()
+
+    def update_yearly_trend(self):
+        """Update yearly trend graph"""
+        ax = self.graphs['yearly_trend']['ax']
+        ax.clear()
+        
+        yearly_data = self.data_processor.get_yearly_trend()
+        if yearly_data is not None:
+            ax1 = ax
+            ax2 = ax1.twinx()
+            
+            x = range(len(yearly_data.index))
+            bars = ax1.bar(x, yearly_data[('amount', 'count')],
+                         color='lightblue', alpha=0.7)
+            line = ax2.plot(x, yearly_data[('amount', 'mean')],
+                          color='lightgreen', marker='o', linewidth=2)
+            
+            ax1.set_xlabel('Year')
+            ax1.set_ylabel('Number of Cases', color='lightblue')
+            ax2.set_ylabel('Average Performance Amount', color='lightgreen')
+            
+            ax1.set_xticks(x)
+            ax1.set_xticklabels(yearly_data.index, rotation=45)
+            
+            for bar in bars:
+                height = bar.get_height()
+                ax1.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{int(height):,}',
+                        ha='center', va='bottom', color='white')
+                
+        PlotUtils.setup_dark_style(ax)
+        PlotUtils.setup_dark_style(ax2)
+        self.graphs['yearly_trend']['canvas'].draw()
+
+    def update_average_amount(self):
+        """Update average amount by age graph"""
+        ax = self.graphs['avg_amount']['ax']
+        ax.clear()
+        
+        avg_by_age = self.data_processor.get_average_amount_by_age()
+        if avg_by_age is not None:
+            x = range(len(avg_by_age))
+            bars = ax.bar(x, avg_by_age.values, color='lightblue')
+            
+            ax.set_xticks(x)
+            ax.set_xticklabels(avg_by_age.index, rotation=45)
+            
+            for bar in bars:
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., height,
+                       f'${height:,.0f}',
+                       ha='center', va='bottom', color='white')
+                
+            ax.set_xlabel('Age Group')
+            ax.set_ylabel('Average Performance Amount ($)')
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['avg_amount']['canvas'].draw()
+
+    def update_gender_distribution(self):
+        """Update gender distribution graph"""
+        ax = self.graphs['gender']['ax']
+        ax.clear()
+        
+        gender_data = self.data_processor.get_gender_distribution()
+        if gender_data is not None:
+            # Group data by age_group
+            age_groups = gender_data['age_group'].unique()
+            n_groups = len(age_groups)
+            
+            bar_width = 0.35
+            index = np.arange(n_groups)
+            
+            # Get data for males and females
+            male_data = gender_data[gender_data['gender'] == 'M']['count'].values
+            female_data = gender_data[gender_data['gender'] == 'F']['count'].values
+            
+            # Create bars
+            ax.bar(index - bar_width/2, male_data, bar_width, 
+                  label='Male', color='lightblue')
+            ax.bar(index + bar_width/2, female_data, bar_width,
+                  label='Female', color='lightpink')
+            
+            ax.set_xlabel('Age Group')
+            ax.set_ylabel('Performance Count')
+            ax.set_xticks(index)
+            ax.set_xticklabels(age_groups, rotation=45)
+            ax.legend()
+            
+        PlotUtils.setup_dark_style(ax)
+        self.graphs['gender']['canvas'].draw()
 
     def update_seasonal_pattern(self):
         """Update seasonal pattern graph"""
@@ -1073,16 +1198,18 @@ class PerformanceTab(BaseTab):
             ax1 = ax
             ax2 = ax1.twinx()
             
-            bars = ax1.bar(seasonal_data.index, 
-                         seasonal_data[('amount', 'count')],
+            x = range(len(seasonal_data.index))
+            bars = ax1.bar(x, seasonal_data[('amount', 'count')],
                          color='lightblue', alpha=0.7)
-            line = ax2.plot(seasonal_data.index, 
-                          seasonal_data[('amount', 'mean')],
+            line = ax2.plot(x, seasonal_data[('amount', 'mean')],
                           color='lightgreen', marker='o', linewidth=2)
             
             ax1.set_xlabel('Season')
             ax1.set_ylabel('Number of Cases', color='lightblue')
             ax2.set_ylabel('Average Amount', color='lightgreen')
+            
+            ax1.set_xticks(x)
+            ax1.set_xticklabels(seasonal_data.index, rotation=45)
             
             for bar in bars:
                 height = bar.get_height()
@@ -1102,27 +1229,26 @@ from pathlib import Path
 class DataProcessor:
     def __init__(self):
         self.data = None
-        self.required_columns = ['age', 'amount', 'diagnosis', 'date']
+        self.required_columns = ['age', 'amount', 'diagnosis', 'date', 'gender']
 
     def has_data(self):
         """Check if data is loaded"""
         return self.data is not None
 
     def load_file(self, file_path: str):
-      """Load data from file"""
-      try:
-          # 파일 경로를 Path 객체로 변환
-          path = Path(file_path)
-          
-          if path.suffix.lower() == '.csv':
-              self.data = pd.read_csv(file_path)
-          else:
-              self.data = pd.read_excel(file_path)
+        """Load data from file"""
+        try:
+            path = Path(file_path)
+            
+            if path.suffix.lower() == '.csv':
+                self.data = pd.read_csv(file_path)
+            else:
+                self.data = pd.read_excel(file_path)
 
-          self.validate_and_preprocess_data()
-          return True, None
-      except Exception as e:
-          return False, str(e)
+            self.validate_and_preprocess_data()
+            return True, None
+        except Exception as e:
+            return False, str(e)
 
     def validate_and_preprocess_data(self):
         """Validate and preprocess loaded data"""
@@ -1135,6 +1261,12 @@ class DataProcessor:
         self.data['date'] = pd.to_datetime(self.data['date'])
         self.data['age'] = pd.to_numeric(self.data['age'], errors='coerce')
         self.data['amount'] = pd.to_numeric(self.data['amount'], errors='coerce')
+        
+        # Ensure gender is uppercase
+        self.data['gender'] = self.data['gender'].str.upper()
+
+        # Remove any rows with NaN values in critical columns
+        self.data = self.data.dropna(subset=['age', 'amount', 'date', 'gender'])
 
         # Add derived columns
         self.add_derived_columns()
@@ -1144,15 +1276,23 @@ class DataProcessor:
         # Age groups
         age_bins = [0, 18, 30, 45, 60, 75, 100]
         age_labels = ['0-18', '19-30', '31-45', '46-60', '61-75', '75+']
-        self.data['age_group'] = pd.cut(self.data['age'], bins=age_bins, labels=age_labels)
+        self.data['age_group'] = pd.cut(self.data['age'], 
+                                      bins=age_bins, 
+                                      labels=age_labels,
+                                      ordered=True)
 
         # Seasonal data
         self.data['month'] = self.data['date'].dt.month
         self.data['season'] = pd.cut(
             self.data['date'].dt.month,
             bins=[0, 3, 6, 9, 12],
-            labels=['Winter', 'Spring', 'Summer', 'Fall']
+            labels=['Winter', 'Spring', 'Summer', 'Fall'],
+            ordered=True
         )
+
+    def get_data(self):
+        """Get the processed data"""
+        return self.data if self.has_data() else None
 
     def get_data_summary(self):
         """Get summary of the data"""
@@ -1185,13 +1325,13 @@ class DataProcessor:
         """Get age distribution data"""
         if not self.has_data():
             return None
-        return self.data['age_group'].value_counts()
+        return self.data['age_group'].value_counts(sort=False)
 
     def get_amount_distribution(self):
         """Get amount distribution data"""
         if not self.has_data():
             return None
-        return self.data['amount']
+        return self.data['amount'].dropna()
 
     def get_diagnosis_distribution(self):
         """Get diagnosis distribution data"""
@@ -1203,21 +1343,23 @@ class DataProcessor:
         """Get monthly trend data"""
         if not self.has_data():
             return None
-        return self.data.groupby(self.data['date'].dt.to_period('M')).size()
+        monthly_data = self.data.groupby(self.data['date'].dt.to_period('M')).size()
+        return monthly_data.sort_index()
 
     def get_yearly_trend(self):
         """Get yearly trend data"""
         if not self.has_data():
             return None
-        return self.data.groupby(self.data['date'].dt.year).agg({
+        yearly_data = self.data.groupby(self.data['date'].dt.year).agg({
             'amount': ['count', 'mean']
         })
+        return yearly_data.sort_index()
 
     def get_seasonal_pattern(self):
         """Get seasonal pattern data"""
         if not self.has_data():
             return None
-        return self.data.groupby('season').agg({
+        return self.data.groupby('season', observed=True).agg({
             'amount': ['count', 'mean']
         })
 
@@ -1227,6 +1369,39 @@ class DataProcessor:
             return None
         numeric_cols = self.data.select_dtypes(include=['int64', 'float64']).columns
         return self.data[numeric_cols].corr()
+
+    def get_average_amount_by_age(self):
+        """Get average amount by age group"""
+        if not self.has_data():
+            return None
+        return self.data.groupby('age_group', observed=True)['amount'].mean().sort_index()
+
+    def get_gender_distribution(self):
+        """Get gender distribution data by age group"""
+        if not self.has_data():
+            return None
+        
+        # Calculate counts by age_group and gender
+        gender_dist = self.data.groupby(['age_group', 'gender'], observed=True).size().unstack(fill_value=0)
+        
+        # Reset index to make age_group a column
+        gender_dist = gender_dist.reset_index()
+        
+        # Ensure M and F columns exist
+        if 'M' not in gender_dist.columns:
+            gender_dist['M'] = 0
+        if 'F' not in gender_dist.columns:
+            gender_dist['F'] = 0
+            
+        # Melt the DataFrame to get it in the right format
+        gender_dist = gender_dist.melt(
+            id_vars=['age_group'],
+            value_vars=['M', 'F'],
+            var_name='gender',
+            value_name='count'
+        )
+        
+        return gender_dist
 
 # utils/plot_utils.py
 import matplotlib.pyplot as plt
@@ -1250,4 +1425,3 @@ class PlotUtils:
         """Setup figure for dark theme"""
         fig.patch.set_facecolor('#2B2B2B')
         fig.subplots_adjust(left=0.15, right=0.95, bottom=0.15, top=0.9)
-
