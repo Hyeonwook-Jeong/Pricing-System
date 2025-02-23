@@ -1,3 +1,7 @@
+# Python 캐시 파일
+__pycache__/
+*.pyc
+
 # 의존성 디렉토리
 node_modules/
 /vendor/
