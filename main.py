@@ -22,6 +22,9 @@ class GeneralPricingSystem(ctk.CTk):
         self.data_processor = DataProcessor()
         self.setup_window()
         self.create_gui()
+        
+        # 초기에 선택된 탭 정보 저장
+        self.current_tab = None
 
     def setup_window(self):
         """Initialize window settings and theme"""
@@ -122,10 +125,12 @@ class GeneralPricingSystem(ctk.CTk):
         try:
             current_tab = self.notebook.select()
             tab_name = self.notebook.tab(current_tab, "text")
+            self.current_tab = tab_name  # 현재 탭 저장
             
             if self.data_processor.has_data():
                 print(f"Tab changed to: {tab_name}")
-                self.tabs[tab_name].update_view()
+                # 자동 업데이트 제거
+                # self.tabs[tab_name].update_view()
         except Exception as e:
             self.show_error("Error updating tab visualizations", e)
 

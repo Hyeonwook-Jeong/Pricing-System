@@ -73,10 +73,14 @@ class PerformanceTab(BaseTab):
 
     def update_view(self):
         """Update all performance visualizations"""
-        if not self.data_processor.has_data():
+        if not self.data_processor.has_data('standard'):
+            print("No standard data available to update Performance visualizations")
             return
 
         try:
+            # 항상 standard 데이터를 사용하도록 설정
+            self.data_processor.active_data_type = 'standard'
+            
             self.update_age_distribution()
             self.update_amount_distribution()
             self.update_diagnosis_distribution()
@@ -86,7 +90,7 @@ class PerformanceTab(BaseTab):
             self.update_gender_distribution()
             self.update_seasonal_pattern()
         except Exception as e:
-            print(f"Error updating visualizations: {str(e)}")
+            print(f"Error updating Performance visualizations: {str(e)}")
             raise e
 
     def update_age_distribution(self):

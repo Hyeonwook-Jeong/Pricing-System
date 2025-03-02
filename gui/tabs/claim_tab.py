@@ -73,10 +73,14 @@ class ClaimTab(BaseTab):
 
     def update_view(self):
         """Update all claim visualizations"""
-        if not self.data_processor.has_data():
+        if not self.data_processor.has_data('claim'):
+            print("No claim data available to update Claim visualizations")
             return
 
         try:
+            # 항상 claim 데이터를 사용하도록 설정
+            self.data_processor.active_data_type = 'claim'
+            
             self.update_age_distribution()
             self.update_amount_distribution()
             self.update_diagnosis_distribution()
@@ -86,7 +90,7 @@ class ClaimTab(BaseTab):
             self.update_gender_distribution()
             self.update_seasonal_pattern()
         except Exception as e:
-            print(f"Error updating visualizations: {str(e)}")
+            print(f"Error updating Claim visualizations: {str(e)}")
             raise e
 
     def update_age_distribution(self):
