@@ -2,6 +2,13 @@
 **/__pycache__/
 **/*.pyc
 
+# database 폴더 내의 .db 파일 무시
+database/*/*.db
+
+# database/standard와 database/claim 폴더는 계속 트래킹
+!database/standard/
+!database/claim/
+
 # 의존성 디렉토리
 node_modules/
 /vendor/
@@ -41,10 +48,3 @@ Archive/
 *.zip
 *.tar.gz
 *.rar
-
-# database 폴더 내의 .db 파일 무시
-database/*/*.db
-
-# database/standard와 database/claim 폴더는 계속 트래킹
-!database/standard/
-!database/claim/
