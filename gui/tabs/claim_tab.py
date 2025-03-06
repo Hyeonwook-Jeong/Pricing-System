@@ -73,24 +73,50 @@ class ClaimTab(BaseTab):
 
     def update_view(self):
         """Update all claim visualizations"""
+        # 첫 번째 디버깅 메시지 추가
+        print("\n======== DEBUG: CLAIM TAB UPDATE_VIEW ========")
+        print(f"Current active_data_type: {self.data_processor.active_data_type}")
+        print(f"Claim data available: {self.data_processor.has_data('claim')}")
+        
         if not self.data_processor.has_data('claim'):
             print("No claim data available to update Claim visualizations")
+            print("======== DEBUG: CLAIM UPDATE SKIPPED ========\n")
             return
 
         try:
             # 항상 claim 데이터를 사용하도록 설정
+            original_type = self.data_processor.active_data_type
             self.data_processor.active_data_type = 'claim'
+            print(f"Set active_data_type to 'claim' (was {original_type})")
             
+            print("Updating claim visualizations...")
             self.update_age_distribution()
+            print("- Age distribution updated")
             self.update_amount_distribution()
+            print("- Amount distribution updated")
             self.update_diagnosis_distribution()
+            print("- Diagnosis distribution updated")
             self.update_monthly_trend()
+            print("- Monthly trend updated")
             self.update_yearly_trend()
+            print("- Yearly trend updated")
             self.update_average_amount()
+            print("- Average amount updated")
             self.update_gender_distribution()
+            print("- Gender distribution updated")
             self.update_seasonal_pattern()
+            print("- Seasonal pattern updated")
+            
+            # 데이터 타입을 원래대로 복원 (필요한 경우)
+            self.data_processor.active_data_type = original_type
+            print(f"Restored active_data_type to '{original_type}'")
+            print("======== DEBUG: CLAIM UPDATE COMPLETE ========\n")
+            
         except Exception as e:
             print(f"Error updating Claim visualizations: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            print("======== DEBUG: CLAIM UPDATE FAILED ========\n")
             raise e
 
     def update_age_distribution(self):

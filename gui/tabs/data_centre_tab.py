@@ -624,18 +624,23 @@ class DataCentreTab(BaseTab):
                 else:  # Claim data
                     self.filter_status.configure(text="Filtering is only available for Standard data")
                     
-                # Automatically update appropriate tab
-                main_app = self.master.master.master
-                if prefix == 'standard':
-                    for tab_name, tab in main_app.tabs.items():
-                        if tab_name == 'Performance':
-                            tab.update_view()
-                            break
-                elif prefix == 'claim':
-                    for tab_name, tab in main_app.tabs.items():
-                        if tab_name == 'Claim':
-                            tab.update_view()
-                            break
+                # 이 부분을 제거하여 자동 업데이트를 방지합니다.
+                # 아래 코드 삭제:
+                # main_app = self.master.master.master
+                # if prefix == 'standard':
+                #     for tab_name, tab in main_app.tabs.items():
+                #         if tab_name == 'Performance':
+                #             tab.update_view()
+                #             break
+                # elif prefix == 'claim':
+                #     for tab_name, tab in main_app.tabs.items():
+                #         if tab_name == 'Claim':
+                #             tab.update_view()
+                #             break
+                
+                # 대신 상태 메시지를 업데이트하여 사용자에게 다음 단계를 안내합니다.
+                self.control_status.configure(text="Dataset loaded. Please apply filters if needed, then click 'Update Tables/Graphs' to visualize.")
+                
             else:
                 status_label.configure(text=f"Data loading error: {error}")
                     
@@ -894,7 +899,8 @@ class DataCentreTab(BaseTab):
             )
             
             if success:
-                self.filter_status.configure(text="Filters applied successfully")
+                self.filter_status.configure(text="Filters applied successfully. Click 'Update Tables/Graphs' to see the results.")
+                # Note: Intentionally NOT updating views here, waiting for user to click Update button
             else:
                 raise Exception(error)
                 
@@ -927,8 +933,10 @@ class DataCentreTab(BaseTab):
                 # 필터 리셋 후 필터 옵션 목록을 갱신
                 self.update_filter_options()
                 
-                # 필터가 리셋되었다는 메시지 표시
-                self.filter_status.configure(text="Filters reset successfully")
+                # 필터가 리셋되었다는 메시지 표시 및 다음 단계 안내
+                self.filter_status.configure(text="Filters reset successfully. Click 'Update Tables/Graphs' to update visualizations.")
+                
+                # 여기서 자동으로 업데이트하지 않음
             else:
                 raise Exception(error)
                     
@@ -946,45 +954,121 @@ class DataCentreTab(BaseTab):
             # 메인 애플리케이션 인스턴스 가져오기
             main_app = self.master.master.master
             
-            # 선택된 데이터베이스 유형에 따라 업데이트
-            if self.selected_database == 'standard':
-                # 데이터 프로세서의 active_data_type 설정
+            # 디버깅을 위한 상태 출력
+            print("\n======== DEBUG: UPDATE VISUALIZATIONS ========")
+            print(f"Selected database: {self.selected_database}")
+            print(f"Selected dataset: {self.selected_dataset}")
+            print(f"Standard data available: {self.data_processor.has_data('standard')}")
+            print(f"Claim data available: {self.data_processor.has_data('claim')}")
+            
+            # 업데이트 상태를 추적
+            performance_updated = False
+            claim_updated = False
+            
+            # Performance 탭 강제 업데이트 (standard 데이터 사용)
+            if self.data_processor.has_data('standard'):
+                print("Standard data exists - attempting to update Performance tab")
+                
+                # 현재 active_data_type 저장
+                original_type = self.data_processor.active_data_type
+                
+                # active_data_type을 'standard'로 명시적 설정
                 self.data_processor.active_data_type = 'standard'
                 
-                # Performance 탭 업데이트
+                # Performance 탭 찾기 및 업데이트
+                performance_tab = None
                 for tab_name, tab in main_app.tabs.items():
                     if tab_name == 'Performance':
-                        tab.update_view()
-                        # 일반적인 업데이트 메시지로 변경
-                        self.control_status.configure(text="Tables and graphs updated successfully")
+                        performance_tab = tab
                         break
                 
-            elif self.selected_database == 'claim':
-                # 데이터 프로세서의 active_data_type 설정
+                if performance_tab:
+                    print("Found Performance tab - updating...")
+                    performance_tab.update_view()
+                    performance_updated = True
+                    print("Performance tab update completed")
+                else:
+                    print("ERROR: Performance tab not found!")
+                
+                # active_data_type 복원
+                self.data_processor.active_data_type = original_type
+            else:
+                print("No standard data available - skipping Performance tab update")
+            
+            # Claim 탭 강제 업데이트 (claim 데이터 사용)
+            if self.data_processor.has_data('claim'):
+                print("Claim data exists - attempting to update Claim tab")
+                
+                # 현재 active_data_type 저장
+                original_type = self.data_processor.active_data_type
+                
+                # active_data_type을 'claim'으로 명시적 설정
                 self.data_processor.active_data_type = 'claim'
                 
-                # Claim 탭 업데이트
+                # Claim 탭 찾기 및 업데이트
+                claim_tab = None
                 for tab_name, tab in main_app.tabs.items():
                     if tab_name == 'Claim':
-                        tab.update_view()
-                        # 일반적인 업데이트 메시지로 변경
-                        self.control_status.configure(text="Tables and graphs updated successfully")
+                        claim_tab = tab
                         break
-            
-            # 만약 양쪽 데이터 모두 로드되어 있다면 모두 업데이트
+                
+                if claim_tab:
+                    print("Found Claim tab - updating...")
+                    claim_tab.update_view()
+                    claim_updated = True
+                    print("Claim tab update completed")
+                else:
+                    print("ERROR: Claim tab not found!")
+                
+                # active_data_type 복원
+                self.data_processor.active_data_type = original_type
+            else:
+                print("No claim data available - skipping Claim tab update")
+                
+            # 상관관계 탭 업데이트 (두 데이터가 모두 필요할 경우)
+            correlation_updated = False
             if self.data_processor.has_data('standard') and self.data_processor.has_data('claim'):
+                print("Both data types exist - attempting to update Correlation tab")
+                
+                # Correlation 탭 찾기 및 업데이트
+                correlation_tab = None
                 for tab_name, tab in main_app.tabs.items():
-                    if tab_name == 'Performance':
-                        self.data_processor.active_data_type = 'standard'
-                        tab.update_view()
-                    elif tab_name == 'Claim':
-                        self.data_processor.active_data_type = 'claim'
-                        tab.update_view()
-                # 일반적인 업데이트 메시지로 변경
-                self.control_status.configure(text="All tables and graphs updated successfully")
+                    if tab_name == 'Correlation':
+                        correlation_tab = tab
+                        break
+                
+                if correlation_tab:
+                    print("Found Correlation tab - updating...")
+                    correlation_tab.update_view()
+                    correlation_updated = True
+                    print("Correlation tab update completed")
+                else:
+                    print("ERROR: Correlation tab not found!")
+            
+            # 상태 메시지 업데이트
+            update_messages = []
+            if performance_updated:
+                update_messages.append("Performance")
+            if claim_updated:
+                update_messages.append("Claim")
+            if correlation_updated:
+                update_messages.append("Correlation")
+            
+            if update_messages:
+                tabs_str = " and ".join(update_messages)
+                status_msg = f"{tabs_str} tables and graphs updated successfully"
+                print(f"Update status message: {status_msg}")
+                self.control_status.configure(text=status_msg)
+            else:
+                self.control_status.configure(text="No data available to update tables and graphs")
+                
+            print("======== DEBUG: UPDATE COMPLETE ========\n")
                 
         except Exception as e:
             self.control_status.configure(text=f"Error updating tables and graphs: {str(e)}")
+            import traceback
+            print(f"Error updating visualizations: {str(e)}")
+            print(traceback.format_exc())
     
     def download_excel(self):
         """Download data in Excel template (3-2)"""
