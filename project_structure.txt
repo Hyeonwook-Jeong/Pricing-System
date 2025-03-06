@@ -1688,34 +1688,36 @@ class DataCentreTab(BaseTab):
     
     def get_filter_options(self, filter_name):
         """Get available options for a specific filter"""
-        # Check if there's any data at all
-        if not hasattr(self.data_processor, 'standard_data') or self.data_processor.standard_data is None:
+        # 디버깅을 위한 로그 추가
+        print(f"Getting filter options for: {filter_name}")
+        
+        # 원본 데이터셋 사용
+        data = self.data_processor.original_standard_data
+        
+        if data is None:
+            print("No original standard data available")
             return []
         
-        try:
-            data = self.data_processor.standard_data
-            
-            filter_column_map = {
-                "Grouping": 'group',
-                "Country": 'country',
-                "Continent": 'continent',
-                "Rating Year": 'rating_year'
-            }
-            
-            column = filter_column_map.get(filter_name)
-            
-            if column and column in data.columns:
-                # For rating year, convert to string to match existing code
-                if column == 'rating_year':
-                    options = sorted(str(year) for year in data[column].unique())
-                else:
-                    options = sorted(data[column].unique())
-                
-                return options
-            
-        except Exception as e:
-            print(f"Error getting filter options for {filter_name}: {str(e)}")
+        filter_column_map = {
+            "Grouping": 'group',
+            "Country": 'country',
+            "Continent": 'continent',
+            "Rating Year": 'rating_year'
+        }
         
+        column = filter_column_map.get(filter_name)
+        
+        if column and column in data.columns:
+            # For rating year, convert to string to match existing code
+            if column == 'rating_year':
+                options = sorted(str(year) for year in data[column].unique())
+            else:
+                options = sorted(data[column].unique())
+            
+            print(f"Filter options for {filter_name}: {options}")
+            return options
+        
+        print(f"No column found for {filter_name}")
         return []
     
     def update_filter_options(self):
@@ -1735,9 +1737,14 @@ class DataCentreTab(BaseTab):
                 # Get the current button and selected options
                 btn = getattr(self, btn_name, None)
                 
-                # Reset selected options to only include valid options
+                # Get current selected options
                 current_selected = getattr(self, attr_name, set())
+                
+                # Ensure all original options are preserved
                 valid_selected = {opt for opt in current_selected if opt in options}
+                
+                # Update selected options to include all original options
+                # but keep the current selections
                 setattr(self, attr_name, valid_selected)
                 
                 # Update button text
