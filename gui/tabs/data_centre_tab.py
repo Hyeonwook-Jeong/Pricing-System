@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import os
 import pandas as pd
+import getpass
 
 class DataCentreTab(BaseTab):
     def setup_ui(self):
@@ -58,7 +59,7 @@ class DataCentreTab(BaseTab):
         self.create_databases_section(data_loading_frame)
         
     def create_settings_section(self, parent):
-        """Create settings section with username and password (1-1)"""
+        """Create settings section with plsql username and plsql password (1-1)"""
         settings_frame = ctk.CTkFrame(parent)
         settings_frame.pack(fill="x", padx=10, pady=5)
         
@@ -75,33 +76,33 @@ class DataCentreTab(BaseTab):
         credentials_frame.pack(fill="x", padx=10, pady=5)
         
         # Username (1-1-1)
-        username_label = ctk.CTkLabel(
+        plsql_username_label = ctk.CTkLabel(
             credentials_frame,
-            text="Username:"
+            text="PLSQL username:"
         )
-        username_label.pack(side="left", padx=(10, 5))
+        plsql_username_label.pack(side="left", padx=(10, 5))
         
-        self.username_entry = ctk.CTkEntry(
+        self.plsql_username_entry = ctk.CTkEntry(
             credentials_frame,
-            placeholder_text="Enter your username",
+            placeholder_text="Enter your PLSQL username",
             width=200
         )
-        self.username_entry.pack(side="left", padx=5)
+        self.plsql_username_entry.pack(side="left", padx=5)
         
         # Password (1-1-2)
-        password_label = ctk.CTkLabel(
+        plsql_password_label = ctk.CTkLabel(
             credentials_frame,
-            text="Password:"
+            text="PLSQL password:"
         )
-        password_label.pack(side="left", padx=(20, 5))
+        plsql_password_label.pack(side="left", padx=(20, 5))
         
-        self.password_entry = ctk.CTkEntry(
+        self.plsql_password_entry = ctk.CTkEntry(
             credentials_frame,
-            placeholder_text="Enter your password",
+            placeholder_text="Enter your PLSQL password",
             width=200,
             show="*"  # Show asterisks for password
         )
-        self.password_entry.pack(side="left", padx=5)
+        self.plsql_password_entry.pack(side="left", padx=5)
         
         # Confirm button (1-1-4)
         self.confirm_credentials_btn = ctk.CTkButton(
@@ -193,7 +194,7 @@ class DataCentreTab(BaseTab):
         try:
             tables = self.data_processor.get_table_list(prefix)
             for table in tables:
-                listbox.insert(tk.END, f"{table['display_name']} - {table['date']} - {table['rows']} rows")
+                listbox.insert(tk.END, f"{table['display_name']} - {table['date']} - By {table.get('username', 'Unknown')}")
         except Exception as e:
             print(f"Error loading databases: {e}")
         
@@ -203,7 +204,7 @@ class DataCentreTab(BaseTab):
         
         db_entry = ctk.CTkEntry(
             query_frame,
-            placeholder_text="Enter database name"
+            placeholder_text="Enter dataset name"
         )
         db_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
         
@@ -224,7 +225,7 @@ class DataCentreTab(BaseTab):
         
         file_entry = ctk.CTkEntry(
             file_frame,
-            placeholder_text="Enter file nickname"
+            placeholder_text="Enter dataset name"
         )
         file_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
         
@@ -466,11 +467,11 @@ class DataCentreTab(BaseTab):
     
     def save_credentials(self):
         """Handle the credentials confirmation button (1-1-4)"""
-        username = self.username_entry.get()
-        password = self.password_entry.get()
+        plsql_username = self.plsql_username_entry.get()
+        plsql_password = self.plsql_password_entry.get()
         
-        if not username or not password:
-            self.credentials_status.configure(text="Please enter both username and password")
+        if not plsql_username or not plsql_password:
+            self.credentials_status.configure(text="Please enter both plsql username and plsql password")
             return
         
         # Here you would save or validate the credentials
@@ -478,8 +479,8 @@ class DataCentreTab(BaseTab):
         self.credentials_status.configure(text="Credentials saved successfully")
         
         # In a real application, you might store these for database access
-        self.db_username = username
-        self.db_password = password
+        self.db_username = plsql_username
+        self.db_password = plsql_password
     
     def on_database_select(self, event, prefix):
         """Handle database selection in listbox (1-2-1, 1-3-1)"""
@@ -541,7 +542,7 @@ class DataCentreTab(BaseTab):
         status_label = getattr(self, f"{prefix}_status")
         
         if not file_nickname:
-            status_label.configure(text="Please enter a file nickname")
+            status_label.configure(text="Please enter a dataset name")
             return
         
         try:
@@ -572,14 +573,21 @@ class DataCentreTab(BaseTab):
             # Data validation
             self.data_processor.validate_data(data, prefix)
             
-            # Save to database
-            success, error = self.data_processor.save_to_database(data, prefix, file_nickname)
+            username = getpass.getuser()
+
+            # Save to database with username
+            success, error = self.data_processor.save_to_database(
+                data, 
+                prefix, 
+                file_nickname, 
+                username
+            )
             
             if success:
                 # Update listbox
                 listbox = getattr(self, f"{prefix}_listbox")
                 current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-                listbox.insert(tk.END, f"{file_nickname} - {current_time} - {len(data)} rows")
+                listbox.insert(tk.END, f"{file_nickname} - {current_time} - By {username}")
                 
                 # Clear input field
                 entry.delete(0, tk.END)

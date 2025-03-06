@@ -81,7 +81,7 @@ class DataProcessor:
         conn = sqlite3.connect(db_path)
         conn.close()
 
-    def save_to_database(self, data, data_type, table_name):
+    def save_to_database(self, data, data_type, table_name, username='Unknown'):
         """
         데이터프레임을 SQLite 데이터베이스에 저장
         
@@ -89,6 +89,7 @@ class DataProcessor:
             data (pandas.DataFrame): 저장할 데이터프레임
             data_type (str): 데이터 타입 ('standard' 또는 'claim')
             table_name (str): 테이블 이름 (사용자 입력)
+            username (str, optional): 데이터를 저장한 사용자 이름. 기본값은 'Unknown'
             
         Returns:
             tuple: (success: bool, error_message: Optional[str])
@@ -115,7 +116,8 @@ class DataProcessor:
                     created_date TEXT,
                     rows INTEGER,
                     columns INTEGER,
-                    column_names TEXT
+                    column_names TEXT,
+                    username TEXT
                 )
             ''')
             
@@ -126,7 +128,8 @@ class DataProcessor:
                 'created_date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'rows': len(data),
                 'columns': len(data.columns),
-                'column_names': ','.join(data.columns)
+                'column_names': ','.join(data.columns),
+                'username': username
             }
             
             placeholders = ', '.join(['?'] * len(metadata))
@@ -149,7 +152,6 @@ class DataProcessor:
             self.logger.error(error_msg)
             return False, error_msg
         
-    
     def load_from_database(self, data_type, table_name):
         """
         SQLite 데이터베이스에서 데이터 로드
@@ -206,7 +208,7 @@ class DataProcessor:
             data_type (str): 데이터 타입 ('standard' 또는 'claim')
             
         Returns:
-            list: 테이블 정보 목록 [{name, display_name, date, rows}]
+            list: 테이블 정보 목록 [{name, display_name, date, rows, username}]
         """
         try:
             # 데이터베이스 경로 결정
@@ -225,7 +227,7 @@ class DataProcessor:
             if cursor.fetchone():
                 # 메타데이터에서 테이블 정보 가져오기
                 cursor.execute("""
-                    SELECT table_name, display_name, created_date, rows
+                    SELECT table_name, display_name, created_date, rows, username
                     FROM metadata
                     ORDER BY created_date DESC
                 """)
@@ -234,7 +236,8 @@ class DataProcessor:
                         'name': row[0],  # 실제 테이블 이름
                         'display_name': row[1],  # 표시용 이름
                         'date': row[2],  # 생성 날짜
-                        'rows': row[3]   # 행 수
+                        'rows': row[3],   # 행 수
+                        'username': row[4] or 'Unknown'  # 사용자 이름
                     }
                     for row in cursor.fetchall()
                 ]
@@ -246,7 +249,8 @@ class DataProcessor:
                         'name': row[0],
                         'display_name': row[0],
                         'date': 'Unknown',
-                        'rows': 0
+                        'rows': 0,
+                        'username': 'Unknown'
                     }
                     for row in cursor.fetchall()
                 ]
