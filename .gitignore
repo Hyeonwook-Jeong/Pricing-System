@@ -42,6 +42,9 @@ Archive/
 *.tar.gz
 *.rar
 
-# 데이터 베이스
-!database/
-**/*.db
+# database 폴더 내의 .db 파일 무시
+database/*/*.db
+
+# database/standard와 database/claim 폴더는 계속 트래킹
+!database/standard/
+!database/claim/
