@@ -41,4 +41,6 @@ Thumbs.db
 *.tar.gz
 *.rar
 
+# 데이터 베이스
+!database/
 **/*.db
