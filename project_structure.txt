@@ -186,6 +186,9 @@ import customtkinter as ctk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from utils.plot_utils import PlotUtils
+import tkinter as tk
+from tkinter import ttk
+import pandas as pd
 
 class BaseTab(ctk.CTkFrame):
     def __init__(self, parent, data_processor):
@@ -227,83 +230,161 @@ class BaseTab(ctk.CTkFrame):
     def update_view(self):
         """Update all visualizations - to be implemented by child classes"""
         raise NotImplementedError
+    
+    def update_table(self, section_id, data):
+        """Update table with data"""
+        if section_id not in self.sections:
+            return
+            
+        tree = self.sections[section_id]["table"]
+        
+        # Clear existing data
+        tree.delete(*tree.get_children())
+        
+        # Configure style for more readable view
+        style = ttk.Style()
+        style.configure("Compact.Treeview", 
+                        rowheight=25,  # Slightly increased, but not too much
+                        font=('Arial', 10))  # Slightly larger, but not bold
+        style.configure("Compact.Treeview.Heading", 
+                        font=('Arial', 10))  # Consistent heading font
+        tree.configure(style="Compact.Treeview")
+        
+        # Reset columns
+        tree["columns"] = ()
+        tree.heading("#0", text="")
+        tree.column("#0", width=0, stretch=tk.NO)
+        
+        if isinstance(data, pd.Series):
+            # Convert series to dataframe
+            data = data.reset_index()
+            columns = data.columns.tolist()
+        elif isinstance(data, pd.DataFrame):
+            columns = data.columns.tolist()
+        else:
+            columns = ["Value"]
+            data = pd.DataFrame({columns[0]: data})
+        
+        # Configure columns dynamically
+        tree["columns"] = columns
+        for col in columns:
+            tree.heading(col, text=col)
+            # More conservative width calculation
+            col_width = max(
+                len(col) * 10,  # Moderate header width
+                max(len(str(val)) * 10 for val in data[col]) if not data[col].empty else 100,
+                100  # Minimum width of 100 pixels
+            )
+            tree.column(col, width=col_width, anchor='center')
+        
+        # Add data rows
+        for i, row in data.iterrows():
+            # Convert all values to strings to avoid potential formatting issues
+            values = [str(val) for val in row.tolist()]
+            tree.insert("", "end", values=values)
+        
+        # Optional: Add scrollbar if many rows
+        for child in tree.master.winfo_children():
+            if isinstance(child, ttk.Scrollbar):
+                child.destroy()
+        
+        scrollbar = ttk.Scrollbar(tree.master, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
 
 # gui/tabs/claim_tab.py
 from .base_tab import BaseTab
 import customtkinter as ctk
+import tkinter as tk
+from tkinter import ttk
 import numpy as np
 from utils.plot_utils import PlotUtils
 import matplotlib.pyplot as plt
+import pandas as pd
 
 class ClaimTab(BaseTab):
     def setup_ui(self):
-        """Setup Claim tab UI components"""
+        """Setup Claim tab UI components with table + graph layout"""
         # Scrollable container
         self.scrollable_frame = ctk.CTkScrollableFrame(self)
         self.scrollable_frame.pack(fill="both", expand=True, padx=2, pady=2)
 
-        # Graph container
-        self.graphs_container = ctk.CTkFrame(self.scrollable_frame)
-        self.graphs_container.pack(fill="both", expand=True, padx=1, pady=1)
+        # Create all visualization sections (table + graph pairs)
+        self.create_visualization_sections()
 
-        # Create all graph frames
-        self.create_graph_frames()
-        self.configure_grid()
+    def create_visualization_sections(self):
+        """Create all visualization sections with tables and graphs"""
+        # Dictionary to store all UI elements
+        self.sections = {}
+        
+        # Create sections for each visualization
+        self.create_section("age", "Claims by Age Group")
+        self.create_section("amount", "Claim Amount Distribution")
+        self.create_section("diagnosis", "Claims by Diagnosis")
+        self.create_section("monthly_trend", "Monthly Claim Trend")
+        self.create_section("yearly_trend", "Yearly Claim Trend")
+        self.create_section("avg_amount", "Average Claim by Age")
+        self.create_section("gender", "Claims by Gender")
+        self.create_section("seasonal", "Seasonal Pattern")
 
-    def create_graph_frames(self):
-        """Create all graph frames for claim visualization"""
-        self.graphs = {
-            'age': self.create_graph_frame(
-                self.graphs_container,
-                "Claims by Age Group",
-                row=0, column=0
-            ),
-            'amount': self.create_graph_frame(
-                self.graphs_container,
-                "Claim Amount Distribution",
-                row=0, column=1
-            ),
-            'diagnosis': self.create_graph_frame(
-                self.graphs_container,
-                "Claims by Diagnosis",
-                row=1, column=0
-            ),
-            'monthly_trend': self.create_graph_frame(
-                self.graphs_container,
-                "Monthly Claim Trend",
-                row=1, column=1
-            ),
-            'yearly_trend': self.create_graph_frame(
-                self.graphs_container,
-                "Yearly Claim Trend",
-                row=2, column=0
-            ),
-            'avg_amount': self.create_graph_frame(
-                self.graphs_container,
-                "Average Claim by Age",
-                row=2, column=1
-            ),
-            'gender': self.create_graph_frame(
-                self.graphs_container,
-                "Claims by Gender",
-                row=3, column=0
-            ),
-            'seasonal': self.create_graph_frame(
-                self.graphs_container,
-                "Seasonal Pattern",
-                row=3, column=1
-            )
+    def create_section(self, section_id, title):
+        """Create a section with table (left) and graph (right)"""
+        # Main section container
+        section_frame = ctk.CTkFrame(self.scrollable_frame)
+        section_frame.pack(fill="x", expand=True, padx=5, pady=10)
+        
+        # Title for the section
+        title_label = ctk.CTkLabel(
+            section_frame,
+            text=title,
+            font=("Helvetica", 16, "bold")
+        )
+        title_label.pack(pady=5)
+        
+        # Container for table and graph
+        content_frame = ctk.CTkFrame(section_frame)
+        content_frame.pack(fill="x", expand=True, padx=5, pady=5)
+        content_frame.grid_columnconfigure(0, weight=1)
+        content_frame.grid_columnconfigure(1, weight=1)
+        
+        # Create table (left side)
+        table_frame = ctk.CTkFrame(content_frame)
+        table_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        
+        # Create treeview for table
+        tree_frame = ctk.CTkFrame(table_frame)
+        tree_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        tree = ttk.Treeview(tree_frame)
+        tree.pack(side="left", fill="both", expand=True)
+        
+        # Add scrollbar to table
+        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+        scrollbar.pack(side="right", fill="y")
+        tree.configure(yscrollcommand=scrollbar.set)
+        
+        # Configure dark style for treeview
+        style = ttk.Style()
+        style.configure("Treeview", 
+                        background="#2B2B2B",
+                        foreground="white",
+                        fieldbackground="#2B2B2B")
+        style.map('Treeview', 
+                 background=[('selected', '#347083')])
+        
+        # Create graph (right side)
+        graph_dict = self.create_graph_frame(content_frame, "", row=0, column=1)
+        
+        # Store references to UI elements
+        self.sections[section_id] = {
+            "frame": section_frame,
+            "table": tree,
+            "graph": graph_dict
         }
-
-    def configure_grid(self):
-        """Configure grid layout"""
-        for i in range(4):
-            self.graphs_container.grid_columnconfigure(i, weight=1)
-            self.graphs_container.grid_rowconfigure(i, weight=1)
 
     def update_view(self):
         """Update all claim visualizations"""
-        # 첫 번째 디버깅 메시지 추가
+        # Debug message
         print("\n======== DEBUG: CLAIM TAB UPDATE_VIEW ========")
         print(f"Current active_data_type: {self.data_processor.active_data_type}")
         print(f"Claim data available: {self.data_processor.has_data('claim')}")
@@ -314,7 +395,7 @@ class ClaimTab(BaseTab):
             return
 
         try:
-            # 항상 claim 데이터를 사용하도록 설정
+            # Always use claim data
             original_type = self.data_processor.active_data_type
             self.data_processor.active_data_type = 'claim'
             print(f"Set active_data_type to 'claim' (was {original_type})")
@@ -337,7 +418,7 @@ class ClaimTab(BaseTab):
             self.update_seasonal_pattern()
             print("- Seasonal pattern updated")
             
-            # 데이터 타입을 원래대로 복원 (필요한 경우)
+            # Restore original data type
             self.data_processor.active_data_type = original_type
             print(f"Restored active_data_type to '{original_type}'")
             print("======== DEBUG: CLAIM UPDATE COMPLETE ========\n")
@@ -349,13 +430,68 @@ class ClaimTab(BaseTab):
             print("======== DEBUG: CLAIM UPDATE FAILED ========\n")
             raise e
 
+    # def update_table(self, section_id, data):
+    #     """Update table with data"""
+    #     if section_id not in self.sections:
+    #         return
+            
+    #     tree = self.sections[section_id]["table"]
+        
+    #     # Clear existing data
+    #     tree.delete(*tree.get_children())
+        
+    #     # Reset columns
+    #     for col in tree["columns"]:
+    #         tree.heading(col, text="")
+        
+    #     if isinstance(data, pd.Series):
+    #         # Convert series to dataframe
+    #         data = data.reset_index()
+    #         columns = data.columns.tolist()
+            
+    #         # Configure columns
+    #         tree["columns"] = columns
+    #         for col in columns:
+    #             tree.heading(col, text=col)
+            
+    #         # Add data rows
+    #         for i, row in data.iterrows():
+    #             values = row.tolist()
+    #             tree.insert("", "end", values=values)
+                
+    #     elif isinstance(data, pd.DataFrame):
+    #         columns = data.columns.tolist()
+            
+    #         # Configure columns
+    #         tree["columns"] = columns
+    #         for col in columns:
+    #             tree.heading(col, text=col)
+            
+    #         # Add data rows
+    #         for i, row in data.iterrows():
+    #             values = row.tolist()
+    #             tree.insert("", "end", values=values)
+                
+    #     elif isinstance(data, np.ndarray):
+    #         # For numpy arrays, create simple index
+    #         tree["columns"] = ["Value"]
+    #         tree.heading("Value", text="Value")
+            
+    #         for i, value in enumerate(data):
+    #             tree.insert("", "end", values=[value])
+
     def update_age_distribution(self):
-        """Update age distribution graph"""
-        ax = self.graphs['age']['ax']
+        """Update age distribution graph and table"""
+        section_id = "age"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         age_dist = self.data_processor.get_age_distribution()
         if age_dist is not None:
+            # Update table
+            self.update_table(section_id, age_dist)
+            
+            # Update graph
             ax.bar(range(len(age_dist)), age_dist.values, color='skyblue')
             ax.set_xlabel('Age Group')
             ax.set_ylabel('Number of Claims')
@@ -363,29 +499,48 @@ class ClaimTab(BaseTab):
             ax.set_xticklabels(age_dist.index, rotation=45)
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['age']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_amount_distribution(self):
-        """Update amount distribution graph"""
-        ax = self.graphs['amount']['ax']
+        """Update amount distribution graph and table"""
+        section_id = "amount"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         amount_data = self.data_processor.get_amount_distribution()
         if amount_data is not None:
+            # Create a histogram and get bin data for the table
+            counts, bins = np.histogram(amount_data, bins=50)
+            bin_centers = 0.5 * (bins[:-1] + bins[1:])
+            hist_data = pd.DataFrame({
+                'Bin_Start': bins[:-1],
+                'Bin_End': bins[1:],
+                'Count': counts
+            })
+            
+            # Update table
+            self.update_table(section_id, hist_data)
+            
+            # Update graph
             ax.hist(amount_data, bins=50, color='lightgreen')
             ax.set_xlabel('Claim Amount')
             ax.set_ylabel('Frequency')
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['amount']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_diagnosis_distribution(self):
-        """Update diagnosis distribution graph"""
-        ax = self.graphs['diagnosis']['ax']
+        """Update diagnosis distribution graph and table"""
+        section_id = "diagnosis"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         diagnosis_data = self.data_processor.get_diagnosis_distribution()
         if diagnosis_data is not None:
+            # Update table
+            self.update_table(section_id, diagnosis_data)
+            
+            # Update graph
             ax.barh(range(len(diagnosis_data)), diagnosis_data.values, color='salmon')
             ax.set_xlabel('Number of Claims')
             ax.set_ylabel('Diagnosis')
@@ -393,15 +548,20 @@ class ClaimTab(BaseTab):
             ax.set_yticklabels(diagnosis_data.index)
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['diagnosis']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_monthly_trend(self):
-        """Update monthly trend graph"""
-        ax = self.graphs['monthly_trend']['ax']
+        """Update monthly trend graph and table"""
+        section_id = "monthly_trend"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         monthly_data = self.data_processor.get_monthly_trend()
         if monthly_data is not None:
+            # Update table
+            self.update_table(section_id, monthly_data)
+            
+            # Update graph
             ax.plot(range(len(monthly_data)), monthly_data.values, marker='o')
             ax.set_xlabel('Month')
             ax.set_ylabel('Number of Claims')
@@ -409,15 +569,20 @@ class ClaimTab(BaseTab):
             ax.set_xticklabels([str(p) for p in monthly_data.index], rotation=45)
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['monthly_trend']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_yearly_trend(self):
-        """Update yearly trend graph"""
-        ax = self.graphs['yearly_trend']['ax']
+        """Update yearly trend graph and table"""
+        section_id = "yearly_trend"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         yearly_data = self.data_processor.get_yearly_trend()
         if yearly_data is not None:
+            # Update table
+            self.update_table(section_id, yearly_data)
+            
+            # Update graph
             ax1 = ax
             ax2 = ax1.twinx()
             
@@ -442,15 +607,20 @@ class ClaimTab(BaseTab):
                 
         PlotUtils.setup_dark_style(ax)
         PlotUtils.setup_dark_style(ax2)
-        self.graphs['yearly_trend']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_average_amount(self):
-        """Update average amount by age graph"""
-        ax = self.graphs['avg_amount']['ax']
+        """Update average amount by age graph and table"""
+        section_id = "avg_amount"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         avg_by_age = self.data_processor.get_average_amount_by_age()
         if avg_by_age is not None:
+            # Update table
+            self.update_table(section_id, avg_by_age)
+            
+            # Update graph
             x = range(len(avg_by_age))
             bars = ax.bar(x, avg_by_age.values, color='lightblue')
             
@@ -467,15 +637,19 @@ class ClaimTab(BaseTab):
             ax.set_ylabel('Average Claim Amount ($)')
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['avg_amount']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_gender_distribution(self):
-        """Update gender distribution graph"""
-        ax = self.graphs['gender']['ax']
+        """Update gender distribution graph and table"""
+        section_id = "gender"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         gender_data = self.data_processor.get_gender_distribution()
         if gender_data is not None:
+            # Update table
+            self.update_table(section_id, gender_data)
+            
             # Group data by age_group
             age_groups = gender_data['age_group'].unique()
             n_groups = len(age_groups)
@@ -500,15 +674,19 @@ class ClaimTab(BaseTab):
             ax.legend()
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['gender']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_seasonal_pattern(self):
-        """Update seasonal pattern graph"""
-        ax = self.graphs['seasonal']['ax']
+        """Update seasonal pattern graph and table"""
+        section_id = "seasonal"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         seasonal_data = self.data_processor.get_seasonal_pattern()
         if seasonal_data is not None:
+            # Update table
+            self.update_table(section_id, seasonal_data)
+            
             ax1 = ax
             ax2 = ax1.twinx()
             
@@ -533,7 +711,7 @@ class ClaimTab(BaseTab):
                 
         PlotUtils.setup_dark_style(ax)
         PlotUtils.setup_dark_style(ax2)
-        self.graphs['seasonal']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
 # gui/tabs/correlation_tab.py
 from .base_tab import BaseTab
@@ -1395,7 +1573,7 @@ class DataCentreTab(BaseTab):
             self.filter_status.configure(text="")
     
     def open_filter_selection(self, filter_name):
-        """Open multi-select window for filters (2-1, 2-2, 2-3, 2-4)"""
+        """Open multi-select window for filters"""
         # Check if standard data is loaded
         if not hasattr(self.data_processor, 'standard_data') or self.data_processor.standard_data is None:
             messagebox.showinfo("Not Available", "Please load and confirm a standard dataset first.")
@@ -1427,22 +1605,18 @@ class DataCentreTab(BaseTab):
         # Dictionary to store checkboxes variables
         checkbox_vars = {}
         
-        if not options:
-            label = ctk.CTkLabel(scroll_frame, text="No options available")
-            label.pack(padx=10, pady=10)
-        else:
-            # Create checkbox for each option
-            for option in options:
-                var = tk.BooleanVar(value=option in current_selections)
-                checkbox_vars[option] = var
-                
-                checkbox = ctk.CTkCheckBox(
-                    scroll_frame,
-                    text=str(option),
-                    variable=var,
-                    width=200
-                )
-                checkbox.pack(anchor="w", padx=10, pady=2)
+        # Create checkbox for each option
+        for option in options:
+            var = tk.BooleanVar(value=option in current_selections)
+            checkbox_vars[option] = var
+            
+            checkbox = ctk.CTkCheckBox(
+                scroll_frame,
+                text=str(option),
+                variable=var,
+                width=350
+            )
+            checkbox.pack(anchor="w", padx=10, pady=2)
         
         # Create buttons frame
         button_frame = ctk.CTkFrame(popup, height=60)
@@ -1458,7 +1632,7 @@ class DataCentreTab(BaseTab):
             if selected:
                 text = f"{len(selected)} item{'s' if len(selected) > 1 else ''} selected"
             else:
-                text = f"Select {filter_name.lower()}"
+                text = f"Select {filter_name}"
             btn.configure(text=text)
             
             popup.destroy()
@@ -1516,79 +1690,63 @@ class DataCentreTab(BaseTab):
         """Get available options for a specific filter"""
         # Check if there's any data at all
         if not hasattr(self.data_processor, 'standard_data') or self.data_processor.standard_data is None:
-            # No data loaded yet, return empty list instead of error
             return []
         
         try:
-            # Handle each filter type directly instead of using get_unique_values
-            if filter_name == "Grouping":
-                if 'group' in self.data_processor.standard_data.columns:
-                    options = sorted(self.data_processor.standard_data['group'].unique())
-                    if len(options) == 0:
-                        self.filter_status.configure(text="No grouping options available in the data")
-                    return options
-            elif filter_name == "Country":
-                if 'country' in self.data_processor.standard_data.columns:
-                    options = sorted(self.data_processor.standard_data['country'].unique())
-                    if len(options) == 0:
-                        self.filter_status.configure(text="No country options available in the data")
-                    return options
-            elif filter_name == "Continent":
-                if 'continent' in self.data_processor.standard_data.columns:
-                    options = sorted(self.data_processor.standard_data['continent'].unique())
-                    if len(options) == 0:
-                        self.filter_status.configure(text="No continent options available in the data")
-                    return options
-            elif filter_name == "Rating Year":
-                if 'rating_year' in self.data_processor.standard_data.columns:
-                    options = sorted([str(year) for year in self.data_processor.standard_data['rating_year'].unique()])
-                    if len(options) == 0:
-                        self.filter_status.configure(text="No rating year options available in the data")
-                    return options
+            data = self.data_processor.standard_data
+            
+            filter_column_map = {
+                "Grouping": 'group',
+                "Country": 'country',
+                "Continent": 'continent',
+                "Rating Year": 'rating_year'
+            }
+            
+            column = filter_column_map.get(filter_name)
+            
+            if column and column in data.columns:
+                # For rating year, convert to string to match existing code
+                if column == 'rating_year':
+                    options = sorted(str(year) for year in data[column].unique())
+                else:
+                    options = sorted(data[column].unique())
+                
+                return options
+            
         except Exception as e:
-            # Log the specific error
             print(f"Error getting filter options for {filter_name}: {str(e)}")
-            self.filter_status.configure(text=f"Error getting options for {filter_name}")
         
         return []
     
     def update_filter_options(self):
         """Update available filter options based on loaded data"""
-        # Check if we have standard data
         if not hasattr(self.data_processor, 'standard_data') or self.data_processor.standard_data is None:
-            print("No standard data available to update filter options")
             return
         
         try:
-            # Update filter options without changing current selections
             for filter_name in ['Grouping', 'Country', 'Continent', 'Rating Year']:
-                try:
-                    # 필터 옵션 가져오기
-                    options = self.get_filter_options(filter_name)
-                    
-                    if not options:
-                        # 옵션이 없을 경우 에러 메시지 업데이트
-                        btn = getattr(self, f"{filter_name.lower().replace(' ', '_')}_btn", None)
-                        if btn:
-                            btn.configure(text=f"Select {filter_name}")
-                        continue
-                    
-                    # 필터 선택값은 초기화하지 않고 옵션만 갱신
-                    attr_name = f"{filter_name.lower().replace(' ', '_')}_selected"
-                    current_selected = getattr(self, attr_name, set())
-                    
-                    # 실제 버튼 텍스트 업데이트
-                    btn = getattr(self, f"{filter_name.lower().replace(' ', '_')}_btn", None)
-                    if btn:
-                        if current_selected:
-                            btn.configure(text=f"{len(current_selected)} items selected")
-                        else:
-                            btn.configure(text=f"Select {filter_name}")
-                            
-                except Exception as e:
-                    print(f"Error updating {filter_name} filter: {str(e)}")
+                # Get all possible options for this filter
+                options = self.get_filter_options(filter_name)
+                
+                # Determine the attribute name for selected options
+                attr_name = f"{filter_name.lower().replace(' ', '_')}_selected"
+                btn_name = f"{filter_name.lower().replace(' ', '_')}_btn"
+                
+                # Get the current button and selected options
+                btn = getattr(self, btn_name, None)
+                
+                # Reset selected options to only include valid options
+                current_selected = getattr(self, attr_name, set())
+                valid_selected = {opt for opt in current_selected if opt in options}
+                setattr(self, attr_name, valid_selected)
+                
+                # Update button text
+                if btn:
+                    if valid_selected:
+                        btn.configure(text=f"{len(valid_selected)} items selected")
+                    else:
+                        btn.configure(text=f"Select {filter_name}")
             
-            # 필터 옵션이 정상적으로 로드되었음을 표시
             self.filter_status.configure(text="")
             
         except Exception as e:
@@ -1846,79 +2004,96 @@ class DataCentreTab(BaseTab):
 # gui/tabs/performance_tab.py
 from .base_tab import BaseTab
 import customtkinter as ctk
+import tkinter as tk
+from tkinter import ttk
 import numpy as np
 from utils.plot_utils import PlotUtils
 import matplotlib.pyplot as plt
+import pandas as pd
 
 class PerformanceTab(BaseTab):
     def setup_ui(self):
-        """Setup Performance tab UI components"""
+        """Setup Performance tab UI components with table + graph layout"""
         # Scrollable container
         self.scrollable_frame = ctk.CTkScrollableFrame(self)
         self.scrollable_frame.pack(fill="both", expand=True, padx=2, pady=2)
 
-        # Graph container
-        self.graphs_container = ctk.CTkFrame(self.scrollable_frame)
-        self.graphs_container.pack(fill="both", expand=True, padx=1, pady=1)
+        # Create all visualization sections (table + graph pairs)
+        self.create_visualization_sections()
 
-        # Create all graph frames
-        self.create_graph_frames()
-        self.configure_grid()
+    def create_visualization_sections(self):
+        """Create all visualization sections with tables and graphs"""
+        # Dictionary to store all UI elements
+        self.sections = {}
+        
+        # Create sections for each visualization
+        self.create_section("age", "Performance by Age Group")
+        self.create_section("amount", "Performance Amount Distribution")
+        self.create_section("diagnosis", "Performance by Category")
+        self.create_section("monthly_trend", "Monthly Performance Trend")
+        self.create_section("yearly_trend", "Yearly Performance Trend")
+        self.create_section("avg_amount", "Average Performance by Age")
+        self.create_section("gender", "Performance by Gender")
+        self.create_section("seasonal", "Seasonal Performance Pattern")
 
-    def create_graph_frames(self):
-        """Create all graph frames for performance visualization"""
-        self.graphs = {
-            'age': self.create_graph_frame(
-                self.graphs_container,
-                "Performance by Age Group",
-                row=0, column=0
-            ),
-            'amount': self.create_graph_frame(
-                self.graphs_container,
-                "Performance Amount Distribution",
-                row=0, column=1
-            ),
-            'diagnosis': self.create_graph_frame(
-                self.graphs_container,
-                "Performance by Category",
-                row=1, column=0
-            ),
-            'monthly_trend': self.create_graph_frame(
-                self.graphs_container,
-                "Monthly Performance Trend",
-                row=1, column=1
-            ),
-            'yearly_trend': self.create_graph_frame(
-                self.graphs_container,
-                "Yearly Performance Trend",
-                row=2, column=0
-            ),
-            'avg_amount': self.create_graph_frame(
-                self.graphs_container,
-                "Average Performance by Age",
-                row=2, column=1
-            ),
-            'gender': self.create_graph_frame(
-                self.graphs_container,
-                "Performance by Gender",
-                row=3, column=0
-            ),
-            'seasonal': self.create_graph_frame(
-                self.graphs_container,
-                "Seasonal Performance Pattern",
-                row=3, column=1
-            )
+    def create_section(self, section_id, title):
+        """Create a section with table (left) and graph (right)"""
+        # Main section container
+        section_frame = ctk.CTkFrame(self.scrollable_frame)
+        section_frame.pack(fill="x", expand=True, padx=5, pady=10)
+        
+        # Title for the section
+        title_label = ctk.CTkLabel(
+            section_frame,
+            text=title,
+            font=("Helvetica", 16, "bold")
+        )
+        title_label.pack(pady=5)
+        
+        # Container for table and graph
+        content_frame = ctk.CTkFrame(section_frame)
+        content_frame.pack(fill="x", expand=True, padx=5, pady=5)
+        content_frame.grid_columnconfigure(0, weight=1)
+        content_frame.grid_columnconfigure(1, weight=1)
+        
+        # Create table (left side)
+        table_frame = ctk.CTkFrame(content_frame)
+        table_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        
+        # Create treeview for table
+        tree_frame = ctk.CTkFrame(table_frame)
+        tree_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        tree = ttk.Treeview(tree_frame)
+        tree.pack(side="left", fill="both", expand=True)
+        
+        # Add scrollbar to table
+        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+        scrollbar.pack(side="right", fill="y")
+        tree.configure(yscrollcommand=scrollbar.set)
+        
+        # Configure dark style for treeview
+        style = ttk.Style()
+        style.configure("Treeview", 
+                        background="#2B2B2B",
+                        foreground="white",
+                        fieldbackground="#2B2B2B")
+        style.map('Treeview', 
+                 background=[('selected', '#347083')])
+        
+        # Create graph (right side)
+        graph_dict = self.create_graph_frame(content_frame, "", row=0, column=1)
+        
+        # Store references to UI elements
+        self.sections[section_id] = {
+            "frame": section_frame,
+            "table": tree,
+            "graph": graph_dict
         }
-
-    def configure_grid(self):
-        """Configure grid layout"""
-        for i in range(4):
-            self.graphs_container.grid_columnconfigure(i, weight=1)
-            self.graphs_container.grid_rowconfigure(i, weight=1)
 
     def update_view(self):
         """Update all performance visualizations"""
-        # 첫 번째 디버깅 메시지 추가
+        # Debug message
         print("\n======== DEBUG: PERFORMANCE TAB UPDATE_VIEW ========")
         print(f"Current active_data_type: {self.data_processor.active_data_type}")
         print(f"Standard data available: {self.data_processor.has_data('standard')}")
@@ -1929,7 +2104,7 @@ class PerformanceTab(BaseTab):
             return
 
         try:
-            # 항상 standard 데이터를 사용하도록 설정
+            # Always use standard data
             original_type = self.data_processor.active_data_type
             self.data_processor.active_data_type = 'standard'
             print(f"Set active_data_type to 'standard' (was {original_type})")
@@ -1952,7 +2127,7 @@ class PerformanceTab(BaseTab):
             self.update_seasonal_pattern()
             print("- Seasonal pattern updated")
             
-            # 데이터 타입을 원래대로 복원 (필요한 경우)
+            # Restore original data type
             self.data_processor.active_data_type = original_type
             print(f"Restored active_data_type to '{original_type}'")
             print("======== DEBUG: PERFORMANCE UPDATE COMPLETE ========\n")
@@ -1964,13 +2139,68 @@ class PerformanceTab(BaseTab):
             print("======== DEBUG: PERFORMANCE UPDATE FAILED ========\n")
             raise e
 
+    # def update_table(self, section_id, data):
+    #     """Update table with data"""
+    #     if section_id not in self.sections:
+    #         return
+            
+    #     tree = self.sections[section_id]["table"]
+        
+    #     # Clear existing data
+    #     tree.delete(*tree.get_children())
+        
+    #     # Reset columns
+    #     for col in tree["columns"]:
+    #         tree.heading(col, text="")
+        
+    #     if isinstance(data, pd.Series):
+    #         # Convert series to dataframe
+    #         data = data.reset_index()
+    #         columns = data.columns.tolist()
+            
+    #         # Configure columns
+    #         tree["columns"] = columns
+    #         for col in columns:
+    #             tree.heading(col, text=col)
+            
+    #         # Add data rows
+    #         for i, row in data.iterrows():
+    #             values = row.tolist()
+    #             tree.insert("", "end", values=values)
+                
+    #     elif isinstance(data, pd.DataFrame):
+    #         columns = data.columns.tolist()
+            
+    #         # Configure columns
+    #         tree["columns"] = columns
+    #         for col in columns:
+    #             tree.heading(col, text=col)
+            
+    #         # Add data rows
+    #         for i, row in data.iterrows():
+    #             values = row.tolist()
+    #             tree.insert("", "end", values=values)
+                
+    #     elif isinstance(data, np.ndarray):
+    #         # For numpy arrays, create simple index
+    #         tree["columns"] = ["Value"]
+    #         tree.heading("Value", text="Value")
+            
+    #         for i, value in enumerate(data):
+    #             tree.insert("", "end", values=[value])
+
     def update_age_distribution(self):
-        """Update age distribution graph"""
-        ax = self.graphs['age']['ax']
+        """Update age distribution graph and table"""
+        section_id = "age"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         age_dist = self.data_processor.get_age_distribution()
         if age_dist is not None:
+            # Update table
+            self.update_table(section_id, age_dist)
+            
+            # Update graph
             ax.bar(range(len(age_dist)), age_dist.values, color='skyblue')
             ax.set_xlabel('Age Group')
             ax.set_ylabel('Performance Count')
@@ -1978,29 +2208,48 @@ class PerformanceTab(BaseTab):
             ax.set_xticklabels(age_dist.index, rotation=45)
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['age']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_amount_distribution(self):
-        """Update amount distribution graph"""
-        ax = self.graphs['amount']['ax']
+        """Update amount distribution graph and table"""
+        section_id = "amount"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         amount_data = self.data_processor.get_amount_distribution()
         if amount_data is not None:
+            # Create a histogram and get bin data for the table
+            counts, bins = np.histogram(amount_data, bins=50)
+            bin_centers = 0.5 * (bins[:-1] + bins[1:])
+            hist_data = pd.DataFrame({
+                'Bin_Start': bins[:-1],
+                'Bin_End': bins[1:],
+                'Count': counts
+            })
+            
+            # Update table
+            self.update_table(section_id, hist_data)
+            
+            # Update graph
             ax.hist(amount_data, bins=50, color='lightgreen')
             ax.set_xlabel('Performance Amount')
             ax.set_ylabel('Frequency')
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['amount']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_diagnosis_distribution(self):
-        """Update diagnosis distribution graph"""
-        ax = self.graphs['diagnosis']['ax']
+        """Update diagnosis distribution graph and table"""
+        section_id = "diagnosis"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         diagnosis_data = self.data_processor.get_diagnosis_distribution()
         if diagnosis_data is not None:
+            # Update table
+            self.update_table(section_id, diagnosis_data)
+            
+            # Update graph
             ax.barh(range(len(diagnosis_data)), diagnosis_data.values, color='salmon')
             ax.set_xlabel('Performance Count')
             ax.set_ylabel('Category')
@@ -2008,15 +2257,20 @@ class PerformanceTab(BaseTab):
             ax.set_yticklabels(diagnosis_data.index)
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['diagnosis']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_monthly_trend(self):
-        """Update monthly trend graph"""
-        ax = self.graphs['monthly_trend']['ax']
+        """Update monthly trend graph and table"""
+        section_id = "monthly_trend"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         monthly_data = self.data_processor.get_monthly_trend()
         if monthly_data is not None:
+            # Update table
+            self.update_table(section_id, monthly_data)
+            
+            # Update graph
             ax.plot(range(len(monthly_data)), monthly_data.values, marker='o')
             ax.set_xlabel('Month')
             ax.set_ylabel('Performance Count')
@@ -2024,15 +2278,20 @@ class PerformanceTab(BaseTab):
             ax.set_xticklabels([str(p) for p in monthly_data.index], rotation=45)
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['monthly_trend']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_yearly_trend(self):
-        """Update yearly trend graph"""
-        ax = self.graphs['yearly_trend']['ax']
+        """Update yearly trend graph and table"""
+        section_id = "yearly_trend"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         yearly_data = self.data_processor.get_yearly_trend()
         if yearly_data is not None:
+            # Update table
+            self.update_table(section_id, yearly_data)
+            
+            # Update graph
             ax1 = ax
             ax2 = ax1.twinx()
             
@@ -2057,15 +2316,20 @@ class PerformanceTab(BaseTab):
                 
         PlotUtils.setup_dark_style(ax)
         PlotUtils.setup_dark_style(ax2)
-        self.graphs['yearly_trend']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_average_amount(self):
-        """Update average amount by age graph"""
-        ax = self.graphs['avg_amount']['ax']
+        """Update average amount by age graph and table"""
+        section_id = "avg_amount"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         avg_by_age = self.data_processor.get_average_amount_by_age()
         if avg_by_age is not None:
+            # Update table
+            self.update_table(section_id, avg_by_age)
+            
+            # Update graph
             x = range(len(avg_by_age))
             bars = ax.bar(x, avg_by_age.values, color='lightblue')
             
@@ -2082,15 +2346,19 @@ class PerformanceTab(BaseTab):
             ax.set_ylabel('Average Performance Amount ($)')
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['avg_amount']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_gender_distribution(self):
-        """Update gender distribution graph"""
-        ax = self.graphs['gender']['ax']
+        """Update gender distribution graph and table"""
+        section_id = "gender"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         gender_data = self.data_processor.get_gender_distribution()
         if gender_data is not None:
+            # Update table
+            self.update_table(section_id, gender_data)
+            
             # Group data by age_group
             age_groups = gender_data['age_group'].unique()
             n_groups = len(age_groups)
@@ -2115,15 +2383,19 @@ class PerformanceTab(BaseTab):
             ax.legend()
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['gender']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_seasonal_pattern(self):
-        """Update seasonal pattern graph"""
-        ax = self.graphs['seasonal']['ax']
+        """Update seasonal pattern graph and table"""
+        section_id = "seasonal"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         seasonal_data = self.data_processor.get_seasonal_pattern()
         if seasonal_data is not None:
+            # Update table
+            self.update_table(section_id, seasonal_data)
+            
             ax1 = ax
             ax2 = ax1.twinx()
             
@@ -2148,7 +2420,7 @@ class PerformanceTab(BaseTab):
                 
         PlotUtils.setup_dark_style(ax)
         PlotUtils.setup_dark_style(ax2)
-        self.graphs['seasonal']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
 # utils/data_processor.py
 import pandas as pd
@@ -2685,16 +2957,6 @@ class DataProcessor:
                      rating_years=None, start_years=None):
         """
         Apply filters to both standard and claim data
-        
-        Args:
-            groups (list): List of selected groups
-            countries (list): List of selected countries
-            continents (list): List of selected continents
-            rating_years (list): List of selected rating years
-            start_years (list): List of selected start years
-            
-        Returns:
-            tuple: (success: bool, error_message: Optional[str])
         """
         try:
             # Check if standard data is loaded
@@ -2715,136 +2977,66 @@ class DataProcessor:
                 'start_years': [int(year) for year in (start_years or []) if year]
             }
 
-            # Initialize filter flags to track if any filters were used
-            filter_applied = False
-
             # Start with original standard data
             filtered_standard = self.original_standard_data.copy()
             
-            # Store the original row count
-            original_row_count = len(filtered_standard)
-            self.logger.info(f"Original standard data row count: {original_row_count}")
-
+            # Apply filters to standard data
+            temp_filtered = filtered_standard.copy()
+            
+            filter_applied = False
+            
             # Apply each filter if selected
-            temp_filtered = filtered_standard.copy()
-            
-            if groups:
-                if 'group' in temp_filtered.columns and any(g in temp_filtered['group'].unique() for g in groups):
-                    temp_filtered = temp_filtered[temp_filtered['group'].isin(groups)]
-                    self.logger.info(f"After group filter: {len(temp_filtered)} rows")
+            for filter_name, filter_values in [
+                ('group', groups),
+                ('country', countries),
+                ('continent', continents),
+                ('rating_year', rating_years),
+                ('start_year', start_years)
+            ]:
+                if filter_values and filter_name in temp_filtered.columns:
+                    temp_filtered = temp_filtered[temp_filtered[filter_name].isin(filter_values)]
+                    
                     if len(temp_filtered) > 0:
                         filtered_standard = temp_filtered.copy()
                         filter_applied = True
                     else:
-                        self.logger.warning("Group filter would remove all data - skipping this filter")
-                else:
-                    self.logger.warning("Group column not found or no matching values - skipping this filter")
+                        self.logger.warning(f"{filter_name} filter would remove all data - skipping this filter")
             
-            temp_filtered = filtered_standard.copy()
-            if countries:
-                if 'country' in temp_filtered.columns and any(c in temp_filtered['country'].unique() for c in countries):
-                    temp_filtered = temp_filtered[temp_filtered['country'].isin(countries)]
-                    self.logger.info(f"After country filter: {len(temp_filtered)} rows")
-                    if len(temp_filtered) > 0:
-                        filtered_standard = temp_filtered.copy()
-                        filter_applied = True
-                    else:
-                        self.logger.warning("Country filter would remove all data - skipping this filter")
-                else:
-                    self.logger.warning("Country column not found or no matching values - skipping this filter")
-            
-            temp_filtered = filtered_standard.copy()
-            if continents:
-                if 'continent' in temp_filtered.columns and any(c in temp_filtered['continent'].unique() for c in continents):
-                    temp_filtered = temp_filtered[temp_filtered['continent'].isin(continents)]
-                    self.logger.info(f"After continent filter: {len(temp_filtered)} rows")
-                    if len(temp_filtered) > 0:
-                        filtered_standard = temp_filtered.copy()
-                        filter_applied = True
-                    else:
-                        self.logger.warning("Continent filter would remove all data - skipping this filter")
-                else:
-                    self.logger.warning("Continent column not found or no matching values - skipping this filter")
-            
-            temp_filtered = filtered_standard.copy()
-            if rating_years:
-                if 'rating_year' in temp_filtered.columns and any(y in temp_filtered['rating_year'].unique() for y in rating_years):
-                    temp_filtered = temp_filtered[temp_filtered['rating_year'].isin(rating_years)]
-                    self.logger.info(f"After rating year filter: {len(temp_filtered)} rows")
-                    if len(temp_filtered) > 0:
-                        filtered_standard = temp_filtered.copy()
-                        filter_applied = True
-                    else:
-                        self.logger.warning("Rating year filter would remove all data - skipping this filter")
-                else:
-                    self.logger.warning("Rating year column not found or no matching values - skipping this filter")
-            
-            temp_filtered = filtered_standard.copy()
-            if start_years:
-                if 'start_year' in temp_filtered.columns and any(y in temp_filtered['start_year'].unique() for y in start_years):
-                    temp_filtered = temp_filtered[temp_filtered['start_year'].isin(start_years)]
-                    self.logger.info(f"After start year filter: {len(temp_filtered)} rows")
-                    if len(temp_filtered) > 0:
-                        filtered_standard = temp_filtered.copy()
-                        filter_applied = True
-                    else:
-                        self.logger.warning("Start year filter would remove all data - skipping this filter")
-                else:
-                    self.logger.warning("Start year column not found or no matching values - skipping this filter")
-
             # Final check to ensure we haven't filtered out all data
             if len(filtered_standard) == 0:
                 self.logger.warning("All filters combined would remove all data - using original dataset")
                 filtered_standard = self.original_standard_data.copy()
                 filter_applied = False
 
-            # Update standard data and apply standard-specific processing
+            # Update standard data and apply processing
             self.standard_data = self.process_standard_data(filtered_standard)
-            self.logger.info(f"Final standard data row count: {len(self.standard_data)}")
             
-            # Handle claim data if loaded
-            if claim_data_loaded:
-                # Start with original claim data
+            # Handle claim data filtering
+            if claim_data_loaded and filter_applied:
                 filtered_claim = self.original_claim_data.copy()
                 
-                # Only apply filters if any were specified and successfully applied to standard data
-                if filter_applied:
-                    # If there's a common key between datasets, use it to filter claims
-                    if 'policy_id' in filtered_standard.columns and 'policy_id' in filtered_claim.columns:
-                        filtered_policy_ids = filtered_standard['policy_id'].unique()
-                        filtered_claim = filtered_claim[filtered_claim['policy_id'].isin(filtered_policy_ids)]
-                        self.logger.info(f"Applied filters to claim data via policy_id: {len(filtered_claim)} rows")
-                    # If country is a common column and was used in filtering
-                    elif countries and 'country' in filtered_claim.columns:
-                        filtered_claim = filtered_claim[filtered_claim['country'].isin(countries)]
-                        self.logger.info(f"Applied filters to claim data via country: {len(filtered_claim)} rows")
-                    # For other common columns that might be used for filtering
-                    else:
-                        # Apply same filter logic for claim data as for standard data for common columns
-                        if groups and 'group' in filtered_claim.columns:
-                            filtered_claim = filtered_claim[filtered_claim['group'].isin(groups)]
-                            self.logger.info(f"Applied groups filter to claim data: {len(filtered_claim)} rows")
-                        
-                        if continents and 'continent' in filtered_claim.columns:
-                            filtered_claim = filtered_claim[filtered_claim['continent'].isin(continents)]
-                            self.logger.info(f"Applied continents filter to claim data: {len(filtered_claim)} rows")
-                        
-                        if rating_years and 'rating_year' in filtered_claim.columns:
-                            filtered_claim = filtered_claim[filtered_claim['rating_year'].isin(rating_years)]
-                            self.logger.info(f"Applied rating years filter to claim data: {len(filtered_claim)} rows")
-                        
-                        if start_years and 'start_year' in filtered_claim.columns:
-                            filtered_claim = filtered_claim[filtered_claim['start_year'].isin(start_years)]
-                            self.logger.info(f"Applied start years filter to claim data: {len(filtered_claim)} rows")
+                # Add filtering logic for claim data based on standard data filtering
+                if 'policy_id' in filtered_standard.columns and 'policy_id' in filtered_claim.columns:
+                    filtered_policy_ids = filtered_standard['policy_id'].unique()
+                    filtered_claim = filtered_claim[filtered_claim['policy_id'].isin(filtered_policy_ids)]
                 
-                # Final check to ensure we haven't filtered out all claim data
+                # Additional cross-dataset filtering if possible
+                if countries and 'country' in filtered_claim.columns:
+                    filtered_claim = filtered_claim[filtered_claim['country'].isin(countries)]
+                
+                if groups and 'group' in filtered_claim.columns:
+                    filtered_claim = filtered_claim[filtered_claim['group'].isin(groups)]
+                
+                if continents and 'continent' in filtered_claim.columns:
+                    filtered_claim = filtered_claim[filtered_claim['continent'].isin(continents)]
+                
+                # Final check for claim data
                 if len(filtered_claim) == 0:
                     self.logger.warning("Claim filters would remove all data - using original claim dataset")
                     filtered_claim = self.original_claim_data.copy()
                 
-                # Update claim data and apply claim-specific processing
+                # Update claim data and apply processing
                 self.claim_data = self.process_claim_data(filtered_claim)
-                self.logger.info(f"Final claim data row count: {len(self.claim_data)}")
             
             self.logger.info("Filters applied successfully to both datasets")
             return True, None

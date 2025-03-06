@@ -1,79 +1,96 @@
 # gui/tabs/claim_tab.py
 from .base_tab import BaseTab
 import customtkinter as ctk
+import tkinter as tk
+from tkinter import ttk
 import numpy as np
 from utils.plot_utils import PlotUtils
 import matplotlib.pyplot as plt
+import pandas as pd
 
 class ClaimTab(BaseTab):
     def setup_ui(self):
-        """Setup Claim tab UI components"""
+        """Setup Claim tab UI components with table + graph layout"""
         # Scrollable container
         self.scrollable_frame = ctk.CTkScrollableFrame(self)
         self.scrollable_frame.pack(fill="both", expand=True, padx=2, pady=2)
 
-        # Graph container
-        self.graphs_container = ctk.CTkFrame(self.scrollable_frame)
-        self.graphs_container.pack(fill="both", expand=True, padx=1, pady=1)
+        # Create all visualization sections (table + graph pairs)
+        self.create_visualization_sections()
 
-        # Create all graph frames
-        self.create_graph_frames()
-        self.configure_grid()
+    def create_visualization_sections(self):
+        """Create all visualization sections with tables and graphs"""
+        # Dictionary to store all UI elements
+        self.sections = {}
+        
+        # Create sections for each visualization
+        self.create_section("age", "Claims by Age Group")
+        self.create_section("amount", "Claim Amount Distribution")
+        self.create_section("diagnosis", "Claims by Diagnosis")
+        self.create_section("monthly_trend", "Monthly Claim Trend")
+        self.create_section("yearly_trend", "Yearly Claim Trend")
+        self.create_section("avg_amount", "Average Claim by Age")
+        self.create_section("gender", "Claims by Gender")
+        self.create_section("seasonal", "Seasonal Pattern")
 
-    def create_graph_frames(self):
-        """Create all graph frames for claim visualization"""
-        self.graphs = {
-            'age': self.create_graph_frame(
-                self.graphs_container,
-                "Claims by Age Group",
-                row=0, column=0
-            ),
-            'amount': self.create_graph_frame(
-                self.graphs_container,
-                "Claim Amount Distribution",
-                row=0, column=1
-            ),
-            'diagnosis': self.create_graph_frame(
-                self.graphs_container,
-                "Claims by Diagnosis",
-                row=1, column=0
-            ),
-            'monthly_trend': self.create_graph_frame(
-                self.graphs_container,
-                "Monthly Claim Trend",
-                row=1, column=1
-            ),
-            'yearly_trend': self.create_graph_frame(
-                self.graphs_container,
-                "Yearly Claim Trend",
-                row=2, column=0
-            ),
-            'avg_amount': self.create_graph_frame(
-                self.graphs_container,
-                "Average Claim by Age",
-                row=2, column=1
-            ),
-            'gender': self.create_graph_frame(
-                self.graphs_container,
-                "Claims by Gender",
-                row=3, column=0
-            ),
-            'seasonal': self.create_graph_frame(
-                self.graphs_container,
-                "Seasonal Pattern",
-                row=3, column=1
-            )
+    def create_section(self, section_id, title):
+        """Create a section with table (left) and graph (right)"""
+        # Main section container
+        section_frame = ctk.CTkFrame(self.scrollable_frame)
+        section_frame.pack(fill="x", expand=True, padx=5, pady=10)
+        
+        # Title for the section
+        title_label = ctk.CTkLabel(
+            section_frame,
+            text=title,
+            font=("Helvetica", 16, "bold")
+        )
+        title_label.pack(pady=5)
+        
+        # Container for table and graph
+        content_frame = ctk.CTkFrame(section_frame)
+        content_frame.pack(fill="x", expand=True, padx=5, pady=5)
+        content_frame.grid_columnconfigure(0, weight=1)
+        content_frame.grid_columnconfigure(1, weight=1)
+        
+        # Create table (left side)
+        table_frame = ctk.CTkFrame(content_frame)
+        table_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        
+        # Create treeview for table
+        tree_frame = ctk.CTkFrame(table_frame)
+        tree_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        tree = ttk.Treeview(tree_frame)
+        tree.pack(side="left", fill="both", expand=True)
+        
+        # Add scrollbar to table
+        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+        scrollbar.pack(side="right", fill="y")
+        tree.configure(yscrollcommand=scrollbar.set)
+        
+        # Configure dark style for treeview
+        style = ttk.Style()
+        style.configure("Treeview", 
+                        background="#2B2B2B",
+                        foreground="white",
+                        fieldbackground="#2B2B2B")
+        style.map('Treeview', 
+                 background=[('selected', '#347083')])
+        
+        # Create graph (right side)
+        graph_dict = self.create_graph_frame(content_frame, "", row=0, column=1)
+        
+        # Store references to UI elements
+        self.sections[section_id] = {
+            "frame": section_frame,
+            "table": tree,
+            "graph": graph_dict
         }
-
-    def configure_grid(self):
-        """Configure grid layout"""
-        for i in range(4):
-            self.graphs_container.grid_columnconfigure(i, weight=1)
-            self.graphs_container.grid_rowconfigure(i, weight=1)
 
     def update_view(self):
         """Update all claim visualizations"""
-        # 첫 번째 디버깅 메시지 추가
+        # Debug message
         print("\n======== DEBUG: CLAIM TAB UPDATE_VIEW ========")
         print(f"Current active_data_type: {self.data_processor.active_data_type}")
         print(f"Claim data available: {self.data_processor.has_data('claim')}")
@@ -84,7 +101,7 @@ class ClaimTab(BaseTab):
             return
 
         try:
-            # 항상 claim 데이터를 사용하도록 설정
+            # Always use claim data
             original_type = self.data_processor.active_data_type
             self.data_processor.active_data_type = 'claim'
             print(f"Set active_data_type to 'claim' (was {original_type})")
@@ -107,7 +124,7 @@ class ClaimTab(BaseTab):
             self.update_seasonal_pattern()
             print("- Seasonal pattern updated")
             
-            # 데이터 타입을 원래대로 복원 (필요한 경우)
+            # Restore original data type
             self.data_processor.active_data_type = original_type
             print(f"Restored active_data_type to '{original_type}'")
             print("======== DEBUG: CLAIM UPDATE COMPLETE ========\n")
@@ -119,13 +136,68 @@ class ClaimTab(BaseTab):
             print("======== DEBUG: CLAIM UPDATE FAILED ========\n")
             raise e
 
+    # def update_table(self, section_id, data):
+    #     """Update table with data"""
+    #     if section_id not in self.sections:
+    #         return
+            
+    #     tree = self.sections[section_id]["table"]
+        
+    #     # Clear existing data
+    #     tree.delete(*tree.get_children())
+        
+    #     # Reset columns
+    #     for col in tree["columns"]:
+    #         tree.heading(col, text="")
+        
+    #     if isinstance(data, pd.Series):
+    #         # Convert series to dataframe
+    #         data = data.reset_index()
+    #         columns = data.columns.tolist()
+            
+    #         # Configure columns
+    #         tree["columns"] = columns
+    #         for col in columns:
+    #             tree.heading(col, text=col)
+            
+    #         # Add data rows
+    #         for i, row in data.iterrows():
+    #             values = row.tolist()
+    #             tree.insert("", "end", values=values)
+                
+    #     elif isinstance(data, pd.DataFrame):
+    #         columns = data.columns.tolist()
+            
+    #         # Configure columns
+    #         tree["columns"] = columns
+    #         for col in columns:
+    #             tree.heading(col, text=col)
+            
+    #         # Add data rows
+    #         for i, row in data.iterrows():
+    #             values = row.tolist()
+    #             tree.insert("", "end", values=values)
+                
+    #     elif isinstance(data, np.ndarray):
+    #         # For numpy arrays, create simple index
+    #         tree["columns"] = ["Value"]
+    #         tree.heading("Value", text="Value")
+            
+    #         for i, value in enumerate(data):
+    #             tree.insert("", "end", values=[value])
+
     def update_age_distribution(self):
-        """Update age distribution graph"""
-        ax = self.graphs['age']['ax']
+        """Update age distribution graph and table"""
+        section_id = "age"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         age_dist = self.data_processor.get_age_distribution()
         if age_dist is not None:
+            # Update table
+            self.update_table(section_id, age_dist)
+            
+            # Update graph
             ax.bar(range(len(age_dist)), age_dist.values, color='skyblue')
             ax.set_xlabel('Age Group')
             ax.set_ylabel('Number of Claims')
@@ -133,29 +205,48 @@ class ClaimTab(BaseTab):
             ax.set_xticklabels(age_dist.index, rotation=45)
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['age']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_amount_distribution(self):
-        """Update amount distribution graph"""
-        ax = self.graphs['amount']['ax']
+        """Update amount distribution graph and table"""
+        section_id = "amount"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         amount_data = self.data_processor.get_amount_distribution()
         if amount_data is not None:
+            # Create a histogram and get bin data for the table
+            counts, bins = np.histogram(amount_data, bins=50)
+            bin_centers = 0.5 * (bins[:-1] + bins[1:])
+            hist_data = pd.DataFrame({
+                'Bin_Start': bins[:-1],
+                'Bin_End': bins[1:],
+                'Count': counts
+            })
+            
+            # Update table
+            self.update_table(section_id, hist_data)
+            
+            # Update graph
             ax.hist(amount_data, bins=50, color='lightgreen')
             ax.set_xlabel('Claim Amount')
             ax.set_ylabel('Frequency')
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['amount']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_diagnosis_distribution(self):
-        """Update diagnosis distribution graph"""
-        ax = self.graphs['diagnosis']['ax']
+        """Update diagnosis distribution graph and table"""
+        section_id = "diagnosis"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         diagnosis_data = self.data_processor.get_diagnosis_distribution()
         if diagnosis_data is not None:
+            # Update table
+            self.update_table(section_id, diagnosis_data)
+            
+            # Update graph
             ax.barh(range(len(diagnosis_data)), diagnosis_data.values, color='salmon')
             ax.set_xlabel('Number of Claims')
             ax.set_ylabel('Diagnosis')
@@ -163,15 +254,20 @@ class ClaimTab(BaseTab):
             ax.set_yticklabels(diagnosis_data.index)
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['diagnosis']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_monthly_trend(self):
-        """Update monthly trend graph"""
-        ax = self.graphs['monthly_trend']['ax']
+        """Update monthly trend graph and table"""
+        section_id = "monthly_trend"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         monthly_data = self.data_processor.get_monthly_trend()
         if monthly_data is not None:
+            # Update table
+            self.update_table(section_id, monthly_data)
+            
+            # Update graph
             ax.plot(range(len(monthly_data)), monthly_data.values, marker='o')
             ax.set_xlabel('Month')
             ax.set_ylabel('Number of Claims')
@@ -179,15 +275,20 @@ class ClaimTab(BaseTab):
             ax.set_xticklabels([str(p) for p in monthly_data.index], rotation=45)
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['monthly_trend']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_yearly_trend(self):
-        """Update yearly trend graph"""
-        ax = self.graphs['yearly_trend']['ax']
+        """Update yearly trend graph and table"""
+        section_id = "yearly_trend"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         yearly_data = self.data_processor.get_yearly_trend()
         if yearly_data is not None:
+            # Update table
+            self.update_table(section_id, yearly_data)
+            
+            # Update graph
             ax1 = ax
             ax2 = ax1.twinx()
             
@@ -212,15 +313,20 @@ class ClaimTab(BaseTab):
                 
         PlotUtils.setup_dark_style(ax)
         PlotUtils.setup_dark_style(ax2)
-        self.graphs['yearly_trend']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_average_amount(self):
-        """Update average amount by age graph"""
-        ax = self.graphs['avg_amount']['ax']
+        """Update average amount by age graph and table"""
+        section_id = "avg_amount"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         avg_by_age = self.data_processor.get_average_amount_by_age()
         if avg_by_age is not None:
+            # Update table
+            self.update_table(section_id, avg_by_age)
+            
+            # Update graph
             x = range(len(avg_by_age))
             bars = ax.bar(x, avg_by_age.values, color='lightblue')
             
@@ -237,15 +343,19 @@ class ClaimTab(BaseTab):
             ax.set_ylabel('Average Claim Amount ($)')
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['avg_amount']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_gender_distribution(self):
-        """Update gender distribution graph"""
-        ax = self.graphs['gender']['ax']
+        """Update gender distribution graph and table"""
+        section_id = "gender"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         gender_data = self.data_processor.get_gender_distribution()
         if gender_data is not None:
+            # Update table
+            self.update_table(section_id, gender_data)
+            
             # Group data by age_group
             age_groups = gender_data['age_group'].unique()
             n_groups = len(age_groups)
@@ -270,15 +380,19 @@ class ClaimTab(BaseTab):
             ax.legend()
             
         PlotUtils.setup_dark_style(ax)
-        self.graphs['gender']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()
 
     def update_seasonal_pattern(self):
-        """Update seasonal pattern graph"""
-        ax = self.graphs['seasonal']['ax']
+        """Update seasonal pattern graph and table"""
+        section_id = "seasonal"
+        ax = self.sections[section_id]["graph"]["ax"]
         ax.clear()
         
         seasonal_data = self.data_processor.get_seasonal_pattern()
         if seasonal_data is not None:
+            # Update table
+            self.update_table(section_id, seasonal_data)
+            
             ax1 = ax
             ax2 = ax1.twinx()
             
@@ -303,4 +417,4 @@ class ClaimTab(BaseTab):
                 
         PlotUtils.setup_dark_style(ax)
         PlotUtils.setup_dark_style(ax2)
-        self.graphs['seasonal']['canvas'].draw()
+        self.sections[section_id]["graph"]["canvas"].draw()

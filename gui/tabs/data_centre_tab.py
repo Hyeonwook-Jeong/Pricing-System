@@ -656,7 +656,7 @@ class DataCentreTab(BaseTab):
             self.filter_status.configure(text="")
     
     def open_filter_selection(self, filter_name):
-        """Open multi-select window for filters (2-1, 2-2, 2-3, 2-4)"""
+        """Open multi-select window for filters"""
         # Check if standard data is loaded
         if not hasattr(self.data_processor, 'standard_data') or self.data_processor.standard_data is None:
             messagebox.showinfo("Not Available", "Please load and confirm a standard dataset first.")
@@ -688,22 +688,18 @@ class DataCentreTab(BaseTab):
         # Dictionary to store checkboxes variables
         checkbox_vars = {}
         
-        if not options:
-            label = ctk.CTkLabel(scroll_frame, text="No options available")
-            label.pack(padx=10, pady=10)
-        else:
-            # Create checkbox for each option
-            for option in options:
-                var = tk.BooleanVar(value=option in current_selections)
-                checkbox_vars[option] = var
-                
-                checkbox = ctk.CTkCheckBox(
-                    scroll_frame,
-                    text=str(option),
-                    variable=var,
-                    width=200
-                )
-                checkbox.pack(anchor="w", padx=10, pady=2)
+        # Create checkbox for each option
+        for option in options:
+            var = tk.BooleanVar(value=option in current_selections)
+            checkbox_vars[option] = var
+            
+            checkbox = ctk.CTkCheckBox(
+                scroll_frame,
+                text=str(option),
+                variable=var,
+                width=350
+            )
+            checkbox.pack(anchor="w", padx=10, pady=2)
         
         # Create buttons frame
         button_frame = ctk.CTkFrame(popup, height=60)
@@ -719,7 +715,7 @@ class DataCentreTab(BaseTab):
             if selected:
                 text = f"{len(selected)} item{'s' if len(selected) > 1 else ''} selected"
             else:
-                text = f"Select {filter_name.lower()}"
+                text = f"Select {filter_name}"
             btn.configure(text=text)
             
             popup.destroy()
@@ -777,79 +773,63 @@ class DataCentreTab(BaseTab):
         """Get available options for a specific filter"""
         # Check if there's any data at all
         if not hasattr(self.data_processor, 'standard_data') or self.data_processor.standard_data is None:
-            # No data loaded yet, return empty list instead of error
             return []
         
         try:
-            # Handle each filter type directly instead of using get_unique_values
-            if filter_name == "Grouping":
-                if 'group' in self.data_processor.standard_data.columns:
-                    options = sorted(self.data_processor.standard_data['group'].unique())
-                    if len(options) == 0:
-                        self.filter_status.configure(text="No grouping options available in the data")
-                    return options
-            elif filter_name == "Country":
-                if 'country' in self.data_processor.standard_data.columns:
-                    options = sorted(self.data_processor.standard_data['country'].unique())
-                    if len(options) == 0:
-                        self.filter_status.configure(text="No country options available in the data")
-                    return options
-            elif filter_name == "Continent":
-                if 'continent' in self.data_processor.standard_data.columns:
-                    options = sorted(self.data_processor.standard_data['continent'].unique())
-                    if len(options) == 0:
-                        self.filter_status.configure(text="No continent options available in the data")
-                    return options
-            elif filter_name == "Rating Year":
-                if 'rating_year' in self.data_processor.standard_data.columns:
-                    options = sorted([str(year) for year in self.data_processor.standard_data['rating_year'].unique()])
-                    if len(options) == 0:
-                        self.filter_status.configure(text="No rating year options available in the data")
-                    return options
+            data = self.data_processor.standard_data
+            
+            filter_column_map = {
+                "Grouping": 'group',
+                "Country": 'country',
+                "Continent": 'continent',
+                "Rating Year": 'rating_year'
+            }
+            
+            column = filter_column_map.get(filter_name)
+            
+            if column and column in data.columns:
+                # For rating year, convert to string to match existing code
+                if column == 'rating_year':
+                    options = sorted(str(year) for year in data[column].unique())
+                else:
+                    options = sorted(data[column].unique())
+                
+                return options
+            
         except Exception as e:
-            # Log the specific error
             print(f"Error getting filter options for {filter_name}: {str(e)}")
-            self.filter_status.configure(text=f"Error getting options for {filter_name}")
         
         return []
     
     def update_filter_options(self):
         """Update available filter options based on loaded data"""
-        # Check if we have standard data
         if not hasattr(self.data_processor, 'standard_data') or self.data_processor.standard_data is None:
-            print("No standard data available to update filter options")
             return
         
         try:
-            # Update filter options without changing current selections
             for filter_name in ['Grouping', 'Country', 'Continent', 'Rating Year']:
-                try:
-                    # 필터 옵션 가져오기
-                    options = self.get_filter_options(filter_name)
-                    
-                    if not options:
-                        # 옵션이 없을 경우 에러 메시지 업데이트
-                        btn = getattr(self, f"{filter_name.lower().replace(' ', '_')}_btn", None)
-                        if btn:
-                            btn.configure(text=f"Select {filter_name}")
-                        continue
-                    
-                    # 필터 선택값은 초기화하지 않고 옵션만 갱신
-                    attr_name = f"{filter_name.lower().replace(' ', '_')}_selected"
-                    current_selected = getattr(self, attr_name, set())
-                    
-                    # 실제 버튼 텍스트 업데이트
-                    btn = getattr(self, f"{filter_name.lower().replace(' ', '_')}_btn", None)
-                    if btn:
-                        if current_selected:
-                            btn.configure(text=f"{len(current_selected)} items selected")
-                        else:
-                            btn.configure(text=f"Select {filter_name}")
-                            
-                except Exception as e:
-                    print(f"Error updating {filter_name} filter: {str(e)}")
+                # Get all possible options for this filter
+                options = self.get_filter_options(filter_name)
+                
+                # Determine the attribute name for selected options
+                attr_name = f"{filter_name.lower().replace(' ', '_')}_selected"
+                btn_name = f"{filter_name.lower().replace(' ', '_')}_btn"
+                
+                # Get the current button and selected options
+                btn = getattr(self, btn_name, None)
+                
+                # Reset selected options to only include valid options
+                current_selected = getattr(self, attr_name, set())
+                valid_selected = {opt for opt in current_selected if opt in options}
+                setattr(self, attr_name, valid_selected)
+                
+                # Update button text
+                if btn:
+                    if valid_selected:
+                        btn.configure(text=f"{len(valid_selected)} items selected")
+                    else:
+                        btn.configure(text=f"Select {filter_name}")
             
-            # 필터 옵션이 정상적으로 로드되었음을 표시
             self.filter_status.configure(text="")
             
         except Exception as e:

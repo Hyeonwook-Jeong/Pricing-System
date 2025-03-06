@@ -533,16 +533,6 @@ class DataProcessor:
                      rating_years=None, start_years=None):
         """
         Apply filters to both standard and claim data
-        
-        Args:
-            groups (list): List of selected groups
-            countries (list): List of selected countries
-            continents (list): List of selected continents
-            rating_years (list): List of selected rating years
-            start_years (list): List of selected start years
-            
-        Returns:
-            tuple: (success: bool, error_message: Optional[str])
         """
         try:
             # Check if standard data is loaded
@@ -563,136 +553,66 @@ class DataProcessor:
                 'start_years': [int(year) for year in (start_years or []) if year]
             }
 
-            # Initialize filter flags to track if any filters were used
-            filter_applied = False
-
             # Start with original standard data
             filtered_standard = self.original_standard_data.copy()
             
-            # Store the original row count
-            original_row_count = len(filtered_standard)
-            self.logger.info(f"Original standard data row count: {original_row_count}")
-
+            # Apply filters to standard data
+            temp_filtered = filtered_standard.copy()
+            
+            filter_applied = False
+            
             # Apply each filter if selected
-            temp_filtered = filtered_standard.copy()
-            
-            if groups:
-                if 'group' in temp_filtered.columns and any(g in temp_filtered['group'].unique() for g in groups):
-                    temp_filtered = temp_filtered[temp_filtered['group'].isin(groups)]
-                    self.logger.info(f"After group filter: {len(temp_filtered)} rows")
+            for filter_name, filter_values in [
+                ('group', groups),
+                ('country', countries),
+                ('continent', continents),
+                ('rating_year', rating_years),
+                ('start_year', start_years)
+            ]:
+                if filter_values and filter_name in temp_filtered.columns:
+                    temp_filtered = temp_filtered[temp_filtered[filter_name].isin(filter_values)]
+                    
                     if len(temp_filtered) > 0:
                         filtered_standard = temp_filtered.copy()
                         filter_applied = True
                     else:
-                        self.logger.warning("Group filter would remove all data - skipping this filter")
-                else:
-                    self.logger.warning("Group column not found or no matching values - skipping this filter")
+                        self.logger.warning(f"{filter_name} filter would remove all data - skipping this filter")
             
-            temp_filtered = filtered_standard.copy()
-            if countries:
-                if 'country' in temp_filtered.columns and any(c in temp_filtered['country'].unique() for c in countries):
-                    temp_filtered = temp_filtered[temp_filtered['country'].isin(countries)]
-                    self.logger.info(f"After country filter: {len(temp_filtered)} rows")
-                    if len(temp_filtered) > 0:
-                        filtered_standard = temp_filtered.copy()
-                        filter_applied = True
-                    else:
-                        self.logger.warning("Country filter would remove all data - skipping this filter")
-                else:
-                    self.logger.warning("Country column not found or no matching values - skipping this filter")
-            
-            temp_filtered = filtered_standard.copy()
-            if continents:
-                if 'continent' in temp_filtered.columns and any(c in temp_filtered['continent'].unique() for c in continents):
-                    temp_filtered = temp_filtered[temp_filtered['continent'].isin(continents)]
-                    self.logger.info(f"After continent filter: {len(temp_filtered)} rows")
-                    if len(temp_filtered) > 0:
-                        filtered_standard = temp_filtered.copy()
-                        filter_applied = True
-                    else:
-                        self.logger.warning("Continent filter would remove all data - skipping this filter")
-                else:
-                    self.logger.warning("Continent column not found or no matching values - skipping this filter")
-            
-            temp_filtered = filtered_standard.copy()
-            if rating_years:
-                if 'rating_year' in temp_filtered.columns and any(y in temp_filtered['rating_year'].unique() for y in rating_years):
-                    temp_filtered = temp_filtered[temp_filtered['rating_year'].isin(rating_years)]
-                    self.logger.info(f"After rating year filter: {len(temp_filtered)} rows")
-                    if len(temp_filtered) > 0:
-                        filtered_standard = temp_filtered.copy()
-                        filter_applied = True
-                    else:
-                        self.logger.warning("Rating year filter would remove all data - skipping this filter")
-                else:
-                    self.logger.warning("Rating year column not found or no matching values - skipping this filter")
-            
-            temp_filtered = filtered_standard.copy()
-            if start_years:
-                if 'start_year' in temp_filtered.columns and any(y in temp_filtered['start_year'].unique() for y in start_years):
-                    temp_filtered = temp_filtered[temp_filtered['start_year'].isin(start_years)]
-                    self.logger.info(f"After start year filter: {len(temp_filtered)} rows")
-                    if len(temp_filtered) > 0:
-                        filtered_standard = temp_filtered.copy()
-                        filter_applied = True
-                    else:
-                        self.logger.warning("Start year filter would remove all data - skipping this filter")
-                else:
-                    self.logger.warning("Start year column not found or no matching values - skipping this filter")
-
             # Final check to ensure we haven't filtered out all data
             if len(filtered_standard) == 0:
                 self.logger.warning("All filters combined would remove all data - using original dataset")
                 filtered_standard = self.original_standard_data.copy()
                 filter_applied = False
 
-            # Update standard data and apply standard-specific processing
+            # Update standard data and apply processing
             self.standard_data = self.process_standard_data(filtered_standard)
-            self.logger.info(f"Final standard data row count: {len(self.standard_data)}")
             
-            # Handle claim data if loaded
-            if claim_data_loaded:
-                # Start with original claim data
+            # Handle claim data filtering
+            if claim_data_loaded and filter_applied:
                 filtered_claim = self.original_claim_data.copy()
                 
-                # Only apply filters if any were specified and successfully applied to standard data
-                if filter_applied:
-                    # If there's a common key between datasets, use it to filter claims
-                    if 'policy_id' in filtered_standard.columns and 'policy_id' in filtered_claim.columns:
-                        filtered_policy_ids = filtered_standard['policy_id'].unique()
-                        filtered_claim = filtered_claim[filtered_claim['policy_id'].isin(filtered_policy_ids)]
-                        self.logger.info(f"Applied filters to claim data via policy_id: {len(filtered_claim)} rows")
-                    # If country is a common column and was used in filtering
-                    elif countries and 'country' in filtered_claim.columns:
-                        filtered_claim = filtered_claim[filtered_claim['country'].isin(countries)]
-                        self.logger.info(f"Applied filters to claim data via country: {len(filtered_claim)} rows")
-                    # For other common columns that might be used for filtering
-                    else:
-                        # Apply same filter logic for claim data as for standard data for common columns
-                        if groups and 'group' in filtered_claim.columns:
-                            filtered_claim = filtered_claim[filtered_claim['group'].isin(groups)]
-                            self.logger.info(f"Applied groups filter to claim data: {len(filtered_claim)} rows")
-                        
-                        if continents and 'continent' in filtered_claim.columns:
-                            filtered_claim = filtered_claim[filtered_claim['continent'].isin(continents)]
-                            self.logger.info(f"Applied continents filter to claim data: {len(filtered_claim)} rows")
-                        
-                        if rating_years and 'rating_year' in filtered_claim.columns:
-                            filtered_claim = filtered_claim[filtered_claim['rating_year'].isin(rating_years)]
-                            self.logger.info(f"Applied rating years filter to claim data: {len(filtered_claim)} rows")
-                        
-                        if start_years and 'start_year' in filtered_claim.columns:
-                            filtered_claim = filtered_claim[filtered_claim['start_year'].isin(start_years)]
-                            self.logger.info(f"Applied start years filter to claim data: {len(filtered_claim)} rows")
+                # Add filtering logic for claim data based on standard data filtering
+                if 'policy_id' in filtered_standard.columns and 'policy_id' in filtered_claim.columns:
+                    filtered_policy_ids = filtered_standard['policy_id'].unique()
+                    filtered_claim = filtered_claim[filtered_claim['policy_id'].isin(filtered_policy_ids)]
                 
-                # Final check to ensure we haven't filtered out all claim data
+                # Additional cross-dataset filtering if possible
+                if countries and 'country' in filtered_claim.columns:
+                    filtered_claim = filtered_claim[filtered_claim['country'].isin(countries)]
+                
+                if groups and 'group' in filtered_claim.columns:
+                    filtered_claim = filtered_claim[filtered_claim['group'].isin(groups)]
+                
+                if continents and 'continent' in filtered_claim.columns:
+                    filtered_claim = filtered_claim[filtered_claim['continent'].isin(continents)]
+                
+                # Final check for claim data
                 if len(filtered_claim) == 0:
                     self.logger.warning("Claim filters would remove all data - using original claim dataset")
                     filtered_claim = self.original_claim_data.copy()
                 
-                # Update claim data and apply claim-specific processing
+                # Update claim data and apply processing
                 self.claim_data = self.process_claim_data(filtered_claim)
-                self.logger.info(f"Final claim data row count: {len(self.claim_data)}")
             
             self.logger.info("Filters applied successfully to both datasets")
             return True, None
