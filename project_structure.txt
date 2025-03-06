@@ -303,24 +303,50 @@ class ClaimTab(BaseTab):
 
     def update_view(self):
         """Update all claim visualizations"""
+        # 첫 번째 디버깅 메시지 추가
+        print("\n======== DEBUG: CLAIM TAB UPDATE_VIEW ========")
+        print(f"Current active_data_type: {self.data_processor.active_data_type}")
+        print(f"Claim data available: {self.data_processor.has_data('claim')}")
+        
         if not self.data_processor.has_data('claim'):
             print("No claim data available to update Claim visualizations")
+            print("======== DEBUG: CLAIM UPDATE SKIPPED ========\n")
             return
 
         try:
             # 항상 claim 데이터를 사용하도록 설정
+            original_type = self.data_processor.active_data_type
             self.data_processor.active_data_type = 'claim'
+            print(f"Set active_data_type to 'claim' (was {original_type})")
             
+            print("Updating claim visualizations...")
             self.update_age_distribution()
+            print("- Age distribution updated")
             self.update_amount_distribution()
+            print("- Amount distribution updated")
             self.update_diagnosis_distribution()
+            print("- Diagnosis distribution updated")
             self.update_monthly_trend()
+            print("- Monthly trend updated")
             self.update_yearly_trend()
+            print("- Yearly trend updated")
             self.update_average_amount()
+            print("- Average amount updated")
             self.update_gender_distribution()
+            print("- Gender distribution updated")
             self.update_seasonal_pattern()
+            print("- Seasonal pattern updated")
+            
+            # 데이터 타입을 원래대로 복원 (필요한 경우)
+            self.data_processor.active_data_type = original_type
+            print(f"Restored active_data_type to '{original_type}'")
+            print("======== DEBUG: CLAIM UPDATE COMPLETE ========\n")
+            
         except Exception as e:
             print(f"Error updating Claim visualizations: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            print("======== DEBUG: CLAIM UPDATE FAILED ========\n")
             raise e
 
     def update_age_distribution(self):
@@ -1337,18 +1363,23 @@ class DataCentreTab(BaseTab):
                 else:  # Claim data
                     self.filter_status.configure(text="Filtering is only available for Standard data")
                     
-                # Automatically update appropriate tab
-                main_app = self.master.master.master
-                if prefix == 'standard':
-                    for tab_name, tab in main_app.tabs.items():
-                        if tab_name == 'Performance':
-                            tab.update_view()
-                            break
-                elif prefix == 'claim':
-                    for tab_name, tab in main_app.tabs.items():
-                        if tab_name == 'Claim':
-                            tab.update_view()
-                            break
+                # 이 부분을 제거하여 자동 업데이트를 방지합니다.
+                # 아래 코드 삭제:
+                # main_app = self.master.master.master
+                # if prefix == 'standard':
+                #     for tab_name, tab in main_app.tabs.items():
+                #         if tab_name == 'Performance':
+                #             tab.update_view()
+                #             break
+                # elif prefix == 'claim':
+                #     for tab_name, tab in main_app.tabs.items():
+                #         if tab_name == 'Claim':
+                #             tab.update_view()
+                #             break
+                
+                # 대신 상태 메시지를 업데이트하여 사용자에게 다음 단계를 안내합니다.
+                self.control_status.configure(text="Dataset loaded. Please apply filters if needed, then click 'Update Tables/Graphs' to visualize.")
+                
             else:
                 status_label.configure(text=f"Data loading error: {error}")
                     
@@ -1607,7 +1638,8 @@ class DataCentreTab(BaseTab):
             )
             
             if success:
-                self.filter_status.configure(text="Filters applied successfully")
+                self.filter_status.configure(text="Filters applied successfully. Click 'Update Tables/Graphs' to see the results.")
+                # Note: Intentionally NOT updating views here, waiting for user to click Update button
             else:
                 raise Exception(error)
                 
@@ -1640,8 +1672,10 @@ class DataCentreTab(BaseTab):
                 # 필터 리셋 후 필터 옵션 목록을 갱신
                 self.update_filter_options()
                 
-                # 필터가 리셋되었다는 메시지 표시
-                self.filter_status.configure(text="Filters reset successfully")
+                # 필터가 리셋되었다는 메시지 표시 및 다음 단계 안내
+                self.filter_status.configure(text="Filters reset successfully. Click 'Update Tables/Graphs' to update visualizations.")
+                
+                # 여기서 자동으로 업데이트하지 않음
             else:
                 raise Exception(error)
                     
@@ -1659,45 +1693,121 @@ class DataCentreTab(BaseTab):
             # 메인 애플리케이션 인스턴스 가져오기
             main_app = self.master.master.master
             
-            # 선택된 데이터베이스 유형에 따라 업데이트
-            if self.selected_database == 'standard':
-                # 데이터 프로세서의 active_data_type 설정
+            # 디버깅을 위한 상태 출력
+            print("\n======== DEBUG: UPDATE VISUALIZATIONS ========")
+            print(f"Selected database: {self.selected_database}")
+            print(f"Selected dataset: {self.selected_dataset}")
+            print(f"Standard data available: {self.data_processor.has_data('standard')}")
+            print(f"Claim data available: {self.data_processor.has_data('claim')}")
+            
+            # 업데이트 상태를 추적
+            performance_updated = False
+            claim_updated = False
+            
+            # Performance 탭 강제 업데이트 (standard 데이터 사용)
+            if self.data_processor.has_data('standard'):
+                print("Standard data exists - attempting to update Performance tab")
+                
+                # 현재 active_data_type 저장
+                original_type = self.data_processor.active_data_type
+                
+                # active_data_type을 'standard'로 명시적 설정
                 self.data_processor.active_data_type = 'standard'
                 
-                # Performance 탭 업데이트
+                # Performance 탭 찾기 및 업데이트
+                performance_tab = None
                 for tab_name, tab in main_app.tabs.items():
                     if tab_name == 'Performance':
-                        tab.update_view()
-                        # 일반적인 업데이트 메시지로 변경
-                        self.control_status.configure(text="Tables and graphs updated successfully")
+                        performance_tab = tab
                         break
                 
-            elif self.selected_database == 'claim':
-                # 데이터 프로세서의 active_data_type 설정
+                if performance_tab:
+                    print("Found Performance tab - updating...")
+                    performance_tab.update_view()
+                    performance_updated = True
+                    print("Performance tab update completed")
+                else:
+                    print("ERROR: Performance tab not found!")
+                
+                # active_data_type 복원
+                self.data_processor.active_data_type = original_type
+            else:
+                print("No standard data available - skipping Performance tab update")
+            
+            # Claim 탭 강제 업데이트 (claim 데이터 사용)
+            if self.data_processor.has_data('claim'):
+                print("Claim data exists - attempting to update Claim tab")
+                
+                # 현재 active_data_type 저장
+                original_type = self.data_processor.active_data_type
+                
+                # active_data_type을 'claim'으로 명시적 설정
                 self.data_processor.active_data_type = 'claim'
                 
-                # Claim 탭 업데이트
+                # Claim 탭 찾기 및 업데이트
+                claim_tab = None
                 for tab_name, tab in main_app.tabs.items():
                     if tab_name == 'Claim':
-                        tab.update_view()
-                        # 일반적인 업데이트 메시지로 변경
-                        self.control_status.configure(text="Tables and graphs updated successfully")
+                        claim_tab = tab
                         break
-            
-            # 만약 양쪽 데이터 모두 로드되어 있다면 모두 업데이트
+                
+                if claim_tab:
+                    print("Found Claim tab - updating...")
+                    claim_tab.update_view()
+                    claim_updated = True
+                    print("Claim tab update completed")
+                else:
+                    print("ERROR: Claim tab not found!")
+                
+                # active_data_type 복원
+                self.data_processor.active_data_type = original_type
+            else:
+                print("No claim data available - skipping Claim tab update")
+                
+            # 상관관계 탭 업데이트 (두 데이터가 모두 필요할 경우)
+            correlation_updated = False
             if self.data_processor.has_data('standard') and self.data_processor.has_data('claim'):
+                print("Both data types exist - attempting to update Correlation tab")
+                
+                # Correlation 탭 찾기 및 업데이트
+                correlation_tab = None
                 for tab_name, tab in main_app.tabs.items():
-                    if tab_name == 'Performance':
-                        self.data_processor.active_data_type = 'standard'
-                        tab.update_view()
-                    elif tab_name == 'Claim':
-                        self.data_processor.active_data_type = 'claim'
-                        tab.update_view()
-                # 일반적인 업데이트 메시지로 변경
-                self.control_status.configure(text="All tables and graphs updated successfully")
+                    if tab_name == 'Correlation':
+                        correlation_tab = tab
+                        break
+                
+                if correlation_tab:
+                    print("Found Correlation tab - updating...")
+                    correlation_tab.update_view()
+                    correlation_updated = True
+                    print("Correlation tab update completed")
+                else:
+                    print("ERROR: Correlation tab not found!")
+            
+            # 상태 메시지 업데이트
+            update_messages = []
+            if performance_updated:
+                update_messages.append("Performance")
+            if claim_updated:
+                update_messages.append("Claim")
+            if correlation_updated:
+                update_messages.append("Correlation")
+            
+            if update_messages:
+                tabs_str = " and ".join(update_messages)
+                status_msg = f"{tabs_str} tables and graphs updated successfully"
+                print(f"Update status message: {status_msg}")
+                self.control_status.configure(text=status_msg)
+            else:
+                self.control_status.configure(text="No data available to update tables and graphs")
+                
+            print("======== DEBUG: UPDATE COMPLETE ========\n")
                 
         except Exception as e:
             self.control_status.configure(text=f"Error updating tables and graphs: {str(e)}")
+            import traceback
+            print(f"Error updating visualizations: {str(e)}")
+            print(traceback.format_exc())
     
     def download_excel(self):
         """Download data in Excel template (3-2)"""
@@ -1808,24 +1918,50 @@ class PerformanceTab(BaseTab):
 
     def update_view(self):
         """Update all performance visualizations"""
+        # 첫 번째 디버깅 메시지 추가
+        print("\n======== DEBUG: PERFORMANCE TAB UPDATE_VIEW ========")
+        print(f"Current active_data_type: {self.data_processor.active_data_type}")
+        print(f"Standard data available: {self.data_processor.has_data('standard')}")
+        
         if not self.data_processor.has_data('standard'):
             print("No standard data available to update Performance visualizations")
+            print("======== DEBUG: PERFORMANCE UPDATE SKIPPED ========\n")
             return
 
         try:
             # 항상 standard 데이터를 사용하도록 설정
+            original_type = self.data_processor.active_data_type
             self.data_processor.active_data_type = 'standard'
+            print(f"Set active_data_type to 'standard' (was {original_type})")
             
+            print("Updating performance visualizations...")
             self.update_age_distribution()
+            print("- Age distribution updated")
             self.update_amount_distribution()
+            print("- Amount distribution updated")
             self.update_diagnosis_distribution()
+            print("- Diagnosis distribution updated")
             self.update_monthly_trend()
+            print("- Monthly trend updated")
             self.update_yearly_trend()
+            print("- Yearly trend updated")
             self.update_average_amount()
+            print("- Average amount updated")
             self.update_gender_distribution()
+            print("- Gender distribution updated")
             self.update_seasonal_pattern()
+            print("- Seasonal pattern updated")
+            
+            # 데이터 타입을 원래대로 복원 (필요한 경우)
+            self.data_processor.active_data_type = original_type
+            print(f"Restored active_data_type to '{original_type}'")
+            print("======== DEBUG: PERFORMANCE UPDATE COMPLETE ========\n")
+            
         except Exception as e:
             print(f"Error updating Performance visualizations: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            print("======== DEBUG: PERFORMANCE UPDATE FAILED ========\n")
             raise e
 
     def update_age_distribution(self):
@@ -2328,14 +2464,44 @@ class DataProcessor:
             self.logger.setLevel(logging.INFO)
 
     def has_data(self, data_type=None):
-        """Check if data is loaded"""
+        """
+        Check if data is loaded
+        
+        Args:
+            data_type (str): Type of data ('standard' or 'claim'), if None uses active_data_type
+            
+        Returns:
+            bool: True if data is loaded and not empty, False otherwise
+        """
+        # 디버깅 정보 추가
+        print(f"Checking for {data_type if data_type else 'active'} data")
+        
         if data_type is None:
             data_type = self.active_data_type
+            print(f"Using active_data_type: {data_type}")
         
+        # 명시적으로 데이터 속성에 접근하여 검사
         if data_type == 'standard':
-            return self.standard_data is not None and not self.standard_data.empty
+            has_data = self.standard_data is not None and not self.standard_data.empty
+            print(f"Standard data check: {has_data}")
+            if not has_data:
+                print(f"  standard_data is None: {self.standard_data is None}")
+                if self.standard_data is not None:
+                    print(f"  standard_data is empty: {self.standard_data.empty}")
+                    print(f"  standard_data shape: {self.standard_data.shape}")
+            return has_data
+        
         elif data_type == 'claim':
-            return self.claim_data is not None and not self.claim_data.empty
+            has_data = self.claim_data is not None and not self.claim_data.empty
+            print(f"Claim data check: {has_data}")
+            if not has_data:
+                print(f"  claim_data is None: {self.claim_data is None}")
+                if self.claim_data is not None:
+                    print(f"  claim_data is empty: {self.claim_data.empty}")
+                    print(f"  claim_data shape: {self.claim_data.shape}")
+            return has_data
+        
+        print(f"Unknown data type: {data_type}")
         return False
 
     def get_data(self, data_type=None):
@@ -2516,7 +2682,7 @@ class DataProcessor:
             return None
 
     def apply_filters_to_both(self, groups=None, countries=None, continents=None, 
-                         rating_years=None, start_years=None):
+                     rating_years=None, start_years=None):
         """
         Apply filters to both standard and claim data
         
@@ -2549,50 +2715,136 @@ class DataProcessor:
                 'start_years': [int(year) for year in (start_years or []) if year]
             }
 
+            # Initialize filter flags to track if any filters were used
+            filter_applied = False
+
             # Start with original standard data
             filtered_standard = self.original_standard_data.copy()
+            
+            # Store the original row count
+            original_row_count = len(filtered_standard)
+            self.logger.info(f"Original standard data row count: {original_row_count}")
 
             # Apply each filter if selected
+            temp_filtered = filtered_standard.copy()
+            
             if groups:
-                filtered_standard = filtered_standard[filtered_standard['group'].isin(groups)]
-                self.logger.info(f"Filtered by groups: {len(filtered_standard)} rows remaining")
+                if 'group' in temp_filtered.columns and any(g in temp_filtered['group'].unique() for g in groups):
+                    temp_filtered = temp_filtered[temp_filtered['group'].isin(groups)]
+                    self.logger.info(f"After group filter: {len(temp_filtered)} rows")
+                    if len(temp_filtered) > 0:
+                        filtered_standard = temp_filtered.copy()
+                        filter_applied = True
+                    else:
+                        self.logger.warning("Group filter would remove all data - skipping this filter")
+                else:
+                    self.logger.warning("Group column not found or no matching values - skipping this filter")
             
+            temp_filtered = filtered_standard.copy()
             if countries:
-                filtered_standard = filtered_standard[filtered_standard['country'].isin(countries)]
-                self.logger.info(f"Filtered by countries: {len(filtered_standard)} rows remaining")
+                if 'country' in temp_filtered.columns and any(c in temp_filtered['country'].unique() for c in countries):
+                    temp_filtered = temp_filtered[temp_filtered['country'].isin(countries)]
+                    self.logger.info(f"After country filter: {len(temp_filtered)} rows")
+                    if len(temp_filtered) > 0:
+                        filtered_standard = temp_filtered.copy()
+                        filter_applied = True
+                    else:
+                        self.logger.warning("Country filter would remove all data - skipping this filter")
+                else:
+                    self.logger.warning("Country column not found or no matching values - skipping this filter")
             
+            temp_filtered = filtered_standard.copy()
             if continents:
-                filtered_standard = filtered_standard[filtered_standard['continent'].isin(continents)]
-                self.logger.info(f"Filtered by continents: {len(filtered_standard)} rows remaining")
+                if 'continent' in temp_filtered.columns and any(c in temp_filtered['continent'].unique() for c in continents):
+                    temp_filtered = temp_filtered[temp_filtered['continent'].isin(continents)]
+                    self.logger.info(f"After continent filter: {len(temp_filtered)} rows")
+                    if len(temp_filtered) > 0:
+                        filtered_standard = temp_filtered.copy()
+                        filter_applied = True
+                    else:
+                        self.logger.warning("Continent filter would remove all data - skipping this filter")
+                else:
+                    self.logger.warning("Continent column not found or no matching values - skipping this filter")
             
+            temp_filtered = filtered_standard.copy()
             if rating_years:
-                filtered_standard = filtered_standard[filtered_standard['rating_year'].isin(rating_years)]
-                self.logger.info(f"Filtered by rating years: {len(filtered_standard)} rows remaining")
+                if 'rating_year' in temp_filtered.columns and any(y in temp_filtered['rating_year'].unique() for y in rating_years):
+                    temp_filtered = temp_filtered[temp_filtered['rating_year'].isin(rating_years)]
+                    self.logger.info(f"After rating year filter: {len(temp_filtered)} rows")
+                    if len(temp_filtered) > 0:
+                        filtered_standard = temp_filtered.copy()
+                        filter_applied = True
+                    else:
+                        self.logger.warning("Rating year filter would remove all data - skipping this filter")
+                else:
+                    self.logger.warning("Rating year column not found or no matching values - skipping this filter")
             
+            temp_filtered = filtered_standard.copy()
             if start_years:
-                filtered_standard = filtered_standard[filtered_standard['start_year'].isin(start_years)]
-                self.logger.info(f"Filtered by start years: {len(filtered_standard)} rows remaining")
+                if 'start_year' in temp_filtered.columns and any(y in temp_filtered['start_year'].unique() for y in start_years):
+                    temp_filtered = temp_filtered[temp_filtered['start_year'].isin(start_years)]
+                    self.logger.info(f"After start year filter: {len(temp_filtered)} rows")
+                    if len(temp_filtered) > 0:
+                        filtered_standard = temp_filtered.copy()
+                        filter_applied = True
+                    else:
+                        self.logger.warning("Start year filter would remove all data - skipping this filter")
+                else:
+                    self.logger.warning("Start year column not found or no matching values - skipping this filter")
+
+            # Final check to ensure we haven't filtered out all data
+            if len(filtered_standard) == 0:
+                self.logger.warning("All filters combined would remove all data - using original dataset")
+                filtered_standard = self.original_standard_data.copy()
+                filter_applied = False
 
             # Update standard data and apply standard-specific processing
             self.standard_data = self.process_standard_data(filtered_standard)
+            self.logger.info(f"Final standard data row count: {len(self.standard_data)}")
             
             # Handle claim data if loaded
             if claim_data_loaded:
-                # Try to filter claim data based on common keys or columns
+                # Start with original claim data
                 filtered_claim = self.original_claim_data.copy()
                 
-                # If there's a common key between datasets, use it to filter claims
-                if 'policy_id' in filtered_standard.columns and 'policy_id' in filtered_claim.columns:
-                    filtered_policy_ids = filtered_standard['policy_id'].unique()
-                    filtered_claim = filtered_claim[filtered_claim['policy_id'].isin(filtered_policy_ids)]
-                    self.logger.info(f"Applied filters to claim data via policy_id: {len(filtered_claim)} rows")
-                # If country is a common column and was used in filtering
-                elif countries and 'country' in filtered_claim.columns:
-                    filtered_claim = filtered_claim[filtered_claim['country'].isin(countries)]
-                    self.logger.info(f"Applied filters to claim data via country: {len(filtered_claim)} rows")
+                # Only apply filters if any were specified and successfully applied to standard data
+                if filter_applied:
+                    # If there's a common key between datasets, use it to filter claims
+                    if 'policy_id' in filtered_standard.columns and 'policy_id' in filtered_claim.columns:
+                        filtered_policy_ids = filtered_standard['policy_id'].unique()
+                        filtered_claim = filtered_claim[filtered_claim['policy_id'].isin(filtered_policy_ids)]
+                        self.logger.info(f"Applied filters to claim data via policy_id: {len(filtered_claim)} rows")
+                    # If country is a common column and was used in filtering
+                    elif countries and 'country' in filtered_claim.columns:
+                        filtered_claim = filtered_claim[filtered_claim['country'].isin(countries)]
+                        self.logger.info(f"Applied filters to claim data via country: {len(filtered_claim)} rows")
+                    # For other common columns that might be used for filtering
+                    else:
+                        # Apply same filter logic for claim data as for standard data for common columns
+                        if groups and 'group' in filtered_claim.columns:
+                            filtered_claim = filtered_claim[filtered_claim['group'].isin(groups)]
+                            self.logger.info(f"Applied groups filter to claim data: {len(filtered_claim)} rows")
+                        
+                        if continents and 'continent' in filtered_claim.columns:
+                            filtered_claim = filtered_claim[filtered_claim['continent'].isin(continents)]
+                            self.logger.info(f"Applied continents filter to claim data: {len(filtered_claim)} rows")
+                        
+                        if rating_years and 'rating_year' in filtered_claim.columns:
+                            filtered_claim = filtered_claim[filtered_claim['rating_year'].isin(rating_years)]
+                            self.logger.info(f"Applied rating years filter to claim data: {len(filtered_claim)} rows")
+                        
+                        if start_years and 'start_year' in filtered_claim.columns:
+                            filtered_claim = filtered_claim[filtered_claim['start_year'].isin(start_years)]
+                            self.logger.info(f"Applied start years filter to claim data: {len(filtered_claim)} rows")
+                
+                # Final check to ensure we haven't filtered out all claim data
+                if len(filtered_claim) == 0:
+                    self.logger.warning("Claim filters would remove all data - using original claim dataset")
+                    filtered_claim = self.original_claim_data.copy()
                 
                 # Update claim data and apply claim-specific processing
                 self.claim_data = self.process_claim_data(filtered_claim)
+                self.logger.info(f"Final claim data row count: {len(self.claim_data)}")
             
             self.logger.info("Filters applied successfully to both datasets")
             return True, None
@@ -3106,7 +3358,8 @@ class DataProcessor:
         if 'age_group' not in data.columns or 'amount' not in data.columns:
             return None
             
-        return data.groupby('age_group')['amount'].mean()
+        # Add observed=True to suppress the warning
+        return data.groupby('age_group', observed=True)['amount'].mean()
 
     def get_gender_distribution(self, data_type=None):
         """
@@ -3141,7 +3394,8 @@ class DataProcessor:
         if 'gender' not in data.columns or 'age_group' not in data.columns:
             return None
         
-        return data.groupby(['age_group', 'gender']).size().reset_index(name='count')
+        # Add observed=True to suppress the warning
+        return data.groupby(['age_group', 'gender'], observed=True).size().reset_index(name='count')
 
     def get_seasonal_pattern(self, data_type=None):
         """
