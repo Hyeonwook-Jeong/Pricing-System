@@ -35,6 +35,7 @@ Thumbs.db
 *.tmp
 *.swp
 *~
+Archive/
 
 # 압축 파일
 *.zip
