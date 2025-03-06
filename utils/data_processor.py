@@ -5,6 +5,7 @@ from pathlib import Path
 import logging
 from datetime import datetime
 from scipy.stats import chi2_contingency
+import sqlite3
 
 def cramers_v(confusion_matrix):
     """
@@ -49,6 +50,256 @@ class DataProcessor:
             'rating_years': [],
             'start_years': []
         }
+
+        # 데이터베이스 폴더 경로 설정
+        self.db_folder = Path('./database')
+        self.standard_db_path = self.db_folder / 'standard' / 'standard.db'
+        self.claim_db_path = self.db_folder / 'claim' / 'claim.db'
+        
+        # 데이터베이스 폴더가 없으면 생성
+        for path in [self.db_folder, self.db_folder / 'standard', self.db_folder / 'claim']:
+            if not path.exists():
+                path.mkdir(parents=True, exist_ok=True)
+        
+        # SQLite 데이터베이스 연결 초기화
+        self._initialize_database_connections()
+
+    def _initialize_database_connections(self):
+        """초기 데이터베이스 연결 및 테이블 스키마 확인"""
+        # 스탠다드 데이터베이스 초기화
+        self._ensure_db_exists(self.standard_db_path)
+        
+        # 클레임 데이터베이스 초기화
+        self._ensure_db_exists(self.claim_db_path)
+
+    def _ensure_db_exists(self, db_path):
+        """데이터베이스 파일이 존재하는지 확인하고 없으면 생성"""
+        if not db_path.parent.exists():
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # 데이터베이스 연결 생성 (파일이 없으면 자동 생성됨)
+        conn = sqlite3.connect(db_path)
+        conn.close()
+
+    def save_to_database(self, data, data_type, table_name):
+        """
+        데이터프레임을 SQLite 데이터베이스에 저장
+        
+        Args:
+            data (pandas.DataFrame): 저장할 데이터프레임
+            data_type (str): 데이터 타입 ('standard' 또는 'claim')
+            table_name (str): 테이블 이름 (사용자 입력)
+            
+        Returns:
+            tuple: (success: bool, error_message: Optional[str])
+        """
+        try:
+            # 테이블 이름 유효성 검사 (SQLite에서 허용되는 문자만 사용)
+            import re
+            safe_table_name = re.sub(r'[^\w]', '_', table_name)
+            
+            # 데이터베이스 경로 결정
+            db_path = self.standard_db_path if data_type == 'standard' else self.claim_db_path
+            
+            # 데이터베이스 연결
+            conn = sqlite3.connect(db_path)
+            
+            # 데이터프레임을 SQL 테이블로 저장
+            data.to_sql(safe_table_name, conn, if_exists='replace', index=False)
+            
+            # 메타데이터 테이블이 없으면 생성
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS metadata (
+                    table_name TEXT PRIMARY KEY,
+                    display_name TEXT,
+                    created_date TEXT,
+                    rows INTEGER,
+                    columns INTEGER,
+                    column_names TEXT
+                )
+            ''')
+            
+            # 메타데이터 삽입 또는 업데이트
+            metadata = {
+                'table_name': safe_table_name,
+                'display_name': table_name,
+                'created_date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'rows': len(data),
+                'columns': len(data.columns),
+                'column_names': ','.join(data.columns)
+            }
+            
+            placeholders = ', '.join(['?'] * len(metadata))
+            columns = ', '.join(metadata.keys())
+            values = tuple(metadata.values())
+            
+            conn.execute(f'''
+                INSERT OR REPLACE INTO metadata ({columns})
+                VALUES ({placeholders})
+            ''', values)
+            
+            conn.commit()
+            conn.close()
+            
+            self.logger.info(f"데이터를 '{safe_table_name}' 테이블에 저장했습니다")
+            return True, None
+            
+        except Exception as e:
+            error_msg = f"데이터베이스 저장 오류: {str(e)}"
+            self.logger.error(error_msg)
+            return False, error_msg
+        
+    
+    def load_from_database(self, data_type, table_name):
+        """
+        SQLite 데이터베이스에서 데이터 로드
+        
+        Args:
+            data_type (str): 데이터 타입 ('standard' 또는 'claim')
+            table_name (str): 테이블 이름
+            
+        Returns:
+            tuple: (success: bool, data: Optional[pandas.DataFrame], error_message: Optional[str])
+        """
+        try:
+            # 데이터베이스 경로 결정
+            db_path = self.standard_db_path if data_type == 'standard' else self.claim_db_path
+            
+            # 데이터베이스 연결
+            conn = sqlite3.connect(db_path)
+            
+            # 테이블 존재 확인
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+            if not cursor.fetchone():
+                return False, None, f"테이블 '{table_name}'이 존재하지 않습니다"
+            
+            # 데이터 로드
+            data = pd.read_sql(f"SELECT * FROM '{table_name}'", conn)
+            conn.close()
+            
+            # 데이터 처리
+            if data_type == 'standard':
+                self.original_standard_data = data.copy()
+                self.standard_data = data.copy()
+                self.standard_data = self.process_standard_data(self.standard_data)
+                self.active_data_type = 'standard'
+            else:
+                self.original_claim_data = data.copy()
+                self.claim_data = data.copy()
+                self.claim_data = self.process_claim_data(self.claim_data)
+                self.active_data_type = 'claim'
+            
+            self.logger.info(f"'{table_name}'에서 {len(data)} 행을 로드했습니다")
+            return True, data, None
+            
+        except Exception as e:
+            error_msg = f"데이터베이스 로드 오류: {str(e)}"
+            self.logger.error(error_msg)
+            return False, None, error_msg
+    
+    def get_table_list(self, data_type):
+        """
+        데이터베이스의 테이블 목록 조회
+        
+        Args:
+            data_type (str): 데이터 타입 ('standard' 또는 'claim')
+            
+        Returns:
+            list: 테이블 정보 목록 [{name, display_name, date, rows}]
+        """
+        try:
+            # 데이터베이스 경로 결정
+            db_path = self.standard_db_path if data_type == 'standard' else self.claim_db_path
+            
+            # 데이터베이스 파일이 없으면 빈 목록 반환
+            if not db_path.exists():
+                return []
+            
+            # 데이터베이스 연결
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            # 메타데이터 테이블 확인
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='metadata'")
+            if cursor.fetchone():
+                # 메타데이터에서 테이블 정보 가져오기
+                cursor.execute("""
+                    SELECT table_name, display_name, created_date, rows
+                    FROM metadata
+                    ORDER BY created_date DESC
+                """)
+                tables = [
+                    {
+                        'name': row[0],  # 실제 테이블 이름
+                        'display_name': row[1],  # 표시용 이름
+                        'date': row[2],  # 생성 날짜
+                        'rows': row[3]   # 행 수
+                    }
+                    for row in cursor.fetchall()
+                ]
+            else:
+                # 메타데이터가 없으면 기본 테이블 목록만 가져오기
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name != 'metadata'")
+                tables = [
+                    {
+                        'name': row[0],
+                        'display_name': row[0],
+                        'date': 'Unknown',
+                        'rows': 0
+                    }
+                    for row in cursor.fetchall()
+                ]
+            
+            conn.close()
+            return tables
+            
+        except Exception as e:
+            self.logger.error(f"테이블 목록 조회 오류: {str(e)}")
+            return []
+
+    def delete_from_database(self, data_type, table_name):
+        """
+        Delete a table from the SQLite database
+        
+        Args:
+            data_type (str): Data type ('standard' or 'claim')
+            table_name (str): Table name to delete
+            
+        Returns:
+            tuple: (success: bool, error_message: Optional[str])
+        """
+        try:
+            # Determine database path
+            db_path = self.standard_db_path if data_type == 'standard' else self.claim_db_path
+            
+            # Connect to database
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            # Check if table exists
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+            if not cursor.fetchone():
+                return False, f"Table '{table_name}' does not exist"
+            
+            # Delete the table
+            cursor.execute(f"DROP TABLE IF EXISTS '{table_name}'")
+            
+            # Remove from metadata if it exists
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='metadata'")
+            if cursor.fetchone():
+                cursor.execute("DELETE FROM metadata WHERE table_name=?", (table_name,))
+            
+            conn.commit()
+            conn.close()
+            
+            self.logger.info(f"Deleted table '{table_name}' from database")
+            return True, None
+            
+        except Exception as e:
+            error_msg = f"Error deleting from database: {str(e)}"
+            self.logger.error(error_msg)
+            return False, error_msg
 
     def _setup_logging(self):
         """Setup logging configuration"""

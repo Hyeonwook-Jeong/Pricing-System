@@ -1,3 +1,4 @@
+# gui/tabs/data_centre_tab.py
 from gui.tabs.base_tab import BaseTab
 import customtkinter as ctk
 import tkinter as tk
@@ -6,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 import shutil
 import os
+import pandas as pd
 
 class DataCentreTab(BaseTab):
     def setup_ui(self):
@@ -160,7 +162,7 @@ class DataCentreTab(BaseTab):
         )
         panel_title.pack(anchor="w", padx=10, pady=5)
         
-        # Listbox frame (1-2-1, 1-3-1)
+        # Listbox frame
         listbox_frame = ctk.CTkFrame(panel_frame)
         listbox_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
@@ -184,101 +186,103 @@ class DataCentreTab(BaseTab):
         listbox.bind('<<ListboxSelect>>', 
                     lambda event, p=prefix: self.on_database_select(event, p))
         
-        # Store references
+        # Store reference to listbox
         setattr(self, f"{prefix}_listbox", listbox)
         
-        # Function to load initial databases
-        def load_initial_databases():
-            try:
-                # 데이터베이스 테이블이 있는 폴더 경로 (수정 필요)
-                db_folder = Path('./databases')  # 실제 폴더 경로로 변경
-                
-                # 폴더가 존재하면
-                if db_folder.exists():
-                    # CSV와 XLSX 파일 찾기
-                    db_files = list(db_folder.glob('*.csv')) + list(db_folder.glob('*.xlsx'))
-                    
-                    # 리스트박스에 추가
-                    for file in db_files:
-                        current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-                        listbox.insert(tk.END, f"{file.stem} - {file.name} - Uploaded at {current_time}")
-            
-            except Exception as e:
-                print(f"Error loading initial databases: {e}")
-
-        # 초기 데이터베이스 로드
-        load_initial_databases()
+        # Populate listbox with database tables
+        try:
+            tables = self.data_processor.get_table_list(prefix)
+            for table in tables:
+                listbox.insert(tk.END, f"{table['display_name']} - {table['date']} - {table['rows']} rows")
+        except Exception as e:
+            print(f"Error loading databases: {e}")
         
-        # Entry and button for database upload (1-2-2, 1-2-3, 1-3-2, 1-3-3)
+        # Database query section
         query_frame = ctk.CTkFrame(panel_frame)
         query_frame.pack(fill="x", padx=10, pady=5)
         
-        entry = ctk.CTkEntry(
+        db_entry = ctk.CTkEntry(
             query_frame,
             placeholder_text="Enter database name"
         )
-        entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        db_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
         
-        query_btn = ctk.CTkButton(
+        db_btn = ctk.CTkButton(
             query_frame,
             text="From Database",
-            command=lambda p=prefix, e=entry: self.query_database(p, e),
+            command=lambda p=prefix, e=db_entry: self.query_database(p, e),
             width=120
         )
-        query_btn.pack(side="right")
+        db_btn.pack(side="right")
         
         # Store reference
-        setattr(self, f"{prefix}_db_entry", entry)
+        setattr(self, f"{prefix}_db_entry", db_entry)
         
-        # Entry and button for file upload (1-2-4, 1-2-5, 1-3-4, 1-3-5)
-        upload_frame = ctk.CTkFrame(panel_frame)
-        upload_frame.pack(fill="x", padx=10, pady=5)
+        # File upload section
+        file_frame = ctk.CTkFrame(panel_frame)
+        file_frame.pack(fill="x", padx=10, pady=5)
         
-        upload_entry = ctk.CTkEntry(
-            upload_frame,
+        file_entry = ctk.CTkEntry(
+            file_frame,
             placeholder_text="Enter file nickname"
         )
-        upload_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        file_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
         
-        upload_btn = ctk.CTkButton(
-            upload_frame,
+        file_btn = ctk.CTkButton(
+            file_frame,
             text="From File",
-            command=lambda p=prefix, e=upload_entry: self.upload_file(p, e),
+            command=lambda p=prefix, e=file_entry: self.upload_file(p, e),
             width=120
         )
-        upload_btn.pack(side="right")
+        file_btn.pack(side="right")
         
         # Store reference
-        setattr(self, f"{prefix}_file_entry", upload_entry)
+        setattr(self, f"{prefix}_file_entry", file_entry)
         
-        # Confirm button (1-2-7, 1-3-7)
+        # Button container
+        button_frame = ctk.CTkFrame(panel_frame)
+        button_frame.pack(fill="x", padx=10, pady=5)
+        
+        # Configure button container columns
+        button_frame.grid_columnconfigure(0, weight=1)
+        button_frame.grid_columnconfigure(1, weight=1)
+        
+        # Confirm button
         confirm_btn = ctk.CTkButton(
-            panel_frame,
+            button_frame,
             text="Confirm Dataset",
             command=lambda p=prefix: self.confirm_database_selection(p),
-            width=200,
-            height=30  # 높이를 30으로 줄임
+            height=30
         )
-        confirm_btn.pack(anchor="e", padx=10, pady=5, fill="x", expand=True)
-
-        # Status message frame (1-2-6, 1-3-6)
-        status_frame = ctk.CTkFrame(panel_frame)
-        status_frame.pack(fill="x", padx=10, pady=(0, 10))  # 패딩 조정
-
+        confirm_btn.grid(row=0, column=0, padx=(0, 5), pady=5, sticky="ew")
+        
+        # Delete button
+        delete_btn = ctk.CTkButton(
+            button_frame,
+            text="Delete Dataset",
+            command=lambda p=prefix: self.delete_database_selection(p),
+            height=30,
+            fg_color="#E74C3C",
+            hover_color="#C0392B"
+        )
+        delete_btn.grid(row=0, column=1, padx=(5, 0), pady=5, sticky="ew")
+        
         # Status message
+        status_frame = ctk.CTkFrame(panel_frame)
+        status_frame.pack(fill="x", padx=10, pady=(0, 10))
+        
         status_label = ctk.CTkLabel(
             status_frame,
             text="",
             text_color="yellow",
-            height=20  # 높이를 20으로 줄임
+            height=20
         )
         status_label.pack(fill="x", padx=10, pady=2)
         
-        # Store reference
+        # Store references
         setattr(self, f"{prefix}_status", status_label)
-        
-        # Store reference
         setattr(self, f"{prefix}_confirm_btn", confirm_btn)
+        setattr(self, f"{prefix}_delete_btn", delete_btn)
     
     def create_data_filtering_section(self):
         """Create data filtering section (Section 2)"""
@@ -410,6 +414,54 @@ class DataCentreTab(BaseTab):
         )
         self.control_status.pack(side="left", padx=10, fill="x", expand=True)
     
+    def delete_database_selection(self, prefix):
+        """Delete selected dataset from database (handler for delete button)"""
+        listbox = getattr(self, f"{prefix}_listbox")
+        status_label = getattr(self, f"{prefix}_status")
+        
+        selection = listbox.curselection()
+        if not selection:
+            status_label.configure(text="Please select a dataset first")
+            return
+        
+        selected_item = listbox.get(selection[0])
+        parts = selected_item.split(" - ")
+        dataset_name = parts[0]
+        
+        # Confirm with user before deletion
+        confirm = messagebox.askyesno(
+            "Confirm Deletion",
+            f"Are you sure you want to delete the dataset '{dataset_name}'?",
+            icon="warning"
+        )
+        
+        if not confirm:
+            return
+        
+        try:
+            # Call the data processor's delete method
+            success, error = self.data_processor.delete_from_database(prefix, dataset_name)
+            
+            if success:
+                # Remove item from listbox
+                listbox.delete(selection[0])
+                
+                # Update status label
+                status_label.configure(text=f"Successfully deleted dataset '{dataset_name}'")
+                
+                # If this was the currently selected dataset, clear it
+                if (hasattr(self, "selected_dataset") and 
+                    hasattr(self, "selected_database") and
+                    self.selected_dataset == dataset_name and
+                    self.selected_database == prefix):
+                    self.selected_dataset = None
+                    self.selected_database = None
+            else:
+                status_label.configure(text=f"Deletion error: {error}")
+                    
+        except Exception as e:
+            status_label.configure(text=f"Dataset deletion error: {str(e)}")
+
     # ============== Event Handlers ==============
     
     def save_credentials(self):
@@ -456,7 +508,7 @@ class DataCentreTab(BaseTab):
                 self.filter_status.configure(text="")
     
     def query_database(self, prefix, entry):
-        """Handle database query (1-2-3, 1-3-3)"""
+        """Handle database query processing (1-2-3, 1-3-3)"""
         db_name = entry.get()
         status_label = getattr(self, f"{prefix}_status")
         
@@ -465,33 +517,35 @@ class DataCentreTab(BaseTab):
             return
             
         try:
-            # Simulate database query (you would implement actual query)
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+            # Search from table list
+            tables = self.data_processor.get_table_list(prefix)
+            matching_tables = [t for t in tables if db_name.lower() in t['display_name'].lower()]
             
             listbox = getattr(self, f"{prefix}_listbox")
-            listbox.insert(tk.END, f"{db_name} - Queried at {current_time}")
+            listbox.delete(0, tk.END)
             
-            # Clear entry
-            entry.delete(0, tk.END)
+            for table in matching_tables:
+                listbox.insert(tk.END, f"{table['display_name']} - {table['date']} - {table['rows']} rows")
             
-            status_label.configure(text=f"Successfully queried database: {db_name}")
-            
+            if matching_tables:
+                status_label.configure(text=f"Found {len(matching_tables)} matching datasets")
+            else:
+                status_label.configure(text=f"No datasets matching '{db_name}'")
+                
         except Exception as e:
-            status_label.configure(text=f"Error querying database: {str(e)}")
-    
+            status_label.configure(text=f"Query error: {str(e)}")
+
     def upload_file(self, prefix, entry):
-        """Handle file upload (1-2-5, 1-3-5)"""
+        """Handle file upload processing (1-2-5, 1-3-5)"""
         file_nickname = entry.get()
         status_label = getattr(self, f"{prefix}_status")
-        listbox = getattr(self, f"{prefix}_listbox")
-        confirm_btn = getattr(self, f"{prefix}_confirm_btn")
         
         if not file_nickname:
             status_label.configure(text="Please enter a file nickname")
             return
         
         try:
-            # Open file selection dialog
+            # File selection dialog
             file_path = filedialog.askopenfilename(
                 title=f"Select {prefix.capitalize()} File",
                 filetypes=[
@@ -503,35 +557,44 @@ class DataCentreTab(BaseTab):
             )
             
             if not file_path:
-                return  # User canceled file selection
+                return  # User canceled
+                
+            # Check file extension
+            path = Path(file_path)
+            if path.suffix.lower() == '.csv':
+                data = pd.read_csv(file_path)
+            elif path.suffix.lower() in ['.xlsx', '.xls']:
+                data = pd.read_excel(file_path)
+            else:
+                status_label.configure(text=f"Unsupported file format: {path.suffix}")
+                return
+                
+            # Data validation
+            self.data_processor.validate_data(data, prefix)
             
-            file_path = Path(file_path)
+            # Save to database
+            success, error = self.data_processor.save_to_database(data, prefix, file_nickname)
             
-            # Get current time
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-            
-            # Add new item to listbox (keeping existing items)
-            listbox.insert(tk.END, f"{file_nickname} - {file_path.name} - Uploaded at {current_time}")
-            
-            # Enable confirm button
-            confirm_btn.configure(state="normal")
-            
-            # Clear input field
-            entry.delete(0, tk.END)
-            
-            # Update status
-            status_label.configure(text=f"Successfully uploaded file: {file_nickname}")
-            
-            # DO NOT call enable_filter_controls here
-            
+            if success:
+                # Update listbox
+                listbox = getattr(self, f"{prefix}_listbox")
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+                listbox.insert(tk.END, f"{file_nickname} - {current_time} - {len(data)} rows")
+                
+                # Clear input field
+                entry.delete(0, tk.END)
+                
+                status_label.configure(text=f"Successfully uploaded file '{file_nickname}'")
+            else:
+                status_label.configure(text=f"Save error: {error}")
+                
         except Exception as e:
-            status_label.configure(text=f"Error uploading file: {str(e)}")
+            status_label.configure(text=f"File upload error: {str(e)}")
 
     def confirm_database_selection(self, prefix):
-        """Handle database selection confirmation (1-2-7, 1-3-7)"""
+        """Confirm database selection (1-2-7, 1-3-7)"""
         listbox = getattr(self, f"{prefix}_listbox")
         status_label = getattr(self, f"{prefix}_status")
-        confirm_btn = getattr(self, f"{prefix}_confirm_btn")
         
         selection = listbox.curselection()
         if not selection:
@@ -539,35 +602,29 @@ class DataCentreTab(BaseTab):
             return
         
         selected_item = listbox.get(selection[0])
-        
-        # Extract dataset name (remove timestamp and file path)
         parts = selected_item.split(" - ")
         dataset_name = parts[0]
-        file_name = parts[1] if len(parts) > 1 else ""
         
         try:
-            # Load the file into data processor
-            success, error = self.data_processor.load_file(file_name, prefix)
+            # Load data from database
+            success, data, error = self.data_processor.load_from_database(prefix, dataset_name)
             
             if success:
                 # Update status label
-                status_label.configure(text=f"Successfully loaded dataset: {dataset_name}")
+                status_label.configure(text=f"Successfully loaded dataset '{dataset_name}'")
                 
                 # Store selected dataset
                 self.selected_database = prefix
                 self.selected_dataset = dataset_name
                 
-                # Update filter section based on selected database type
+                # Update filter section
                 if prefix == 'standard':
-                    # Update filter options without disabling anything
                     self.update_filter_options()
                     self.filter_status.configure(text="")
                 else:  # Claim data
-                    # Show message without disabling controls
                     self.filter_status.configure(text="Filtering is only available for Standard data")
                     
-                # Automatically update the appropriate tab 
-                # This ensures visualization updates immediately on data load
+                # Automatically update appropriate tab
                 main_app = self.master.master.master
                 if prefix == 'standard':
                     for tab_name, tab in main_app.tabs.items():
@@ -580,10 +637,10 @@ class DataCentreTab(BaseTab):
                             tab.update_view()
                             break
             else:
-                raise Exception(error)
+                status_label.configure(text=f"Data loading error: {error}")
                     
         except Exception as e:
-            status_label.configure(text=f"Error loading dataset: {str(e)}")
+            status_label.configure(text=f"Dataset loading error: {str(e)}")
 
     def enable_filter_controls(self, enable=True):
         """This method is no longer used to disable controls, only sets status message"""
